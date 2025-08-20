@@ -13,6 +13,5 @@ For more information about the maintainer role, see the [community repository](h
 
 - [Alexey Alexandrov](https://github.com/aalexand), Google
 - [Florian Lehner](https://github.com/florianl), Elastic
-- [Tigran Najaryan](https://github.com/tigrannajaryan), Splunk
 
 For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
