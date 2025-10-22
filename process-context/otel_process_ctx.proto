@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package otel_process_ctx.v1development;
+
+message OtelProcessCtx {
+  // Additional key/value pairs as resources https://opentelemetry.io/docs/specs/otel/resource/sdk/
+  // Similar to baggage https://opentelemetry.io/docs/concepts/signals/baggage/ / https://opentelemetry.io/docs/specs/otel/overview/#baggage-signal
+  map<string, string> resources = 1;
+  // https://opentelemetry.io/docs/specs/semconv/registry/attributes/deployment/#deployment-environment-name
+  string deployment_environment_name = 2;
+  // https://opentelemetry.io/docs/specs/semconv/registry/attributes/service/#service-instance-id
+  string service_instance_id = 3;
+  // https://opentelemetry.io/docs/specs/semconv/registry/attributes/service/#service-name
+  string service_name = 4;
+  // https://opentelemetry.io/docs/specs/semconv/registry/attributes/service/#service-version
+  string service_version = 5;
+  // https://opentelemetry.io/docs/specs/semconv/registry/attributes/telemetry/#telemetry-sdk-language
+  string telemetry_sdk_language = 6;
+  // https://opentelemetry.io/docs/specs/semconv/registry/attributes/telemetry/#telemetry-sdk-version
+  string telemetry_sdk_version = 7;
+  // https://opentelemetry.io/docs/specs/semconv/registry/attributes/telemetry/#telemetry-sdk-name
+  string telemetry_sdk_name = 8;
+}
