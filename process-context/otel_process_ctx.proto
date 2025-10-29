@@ -31,4 +31,10 @@ message OtelProcessCtx {
   string telemetry_sdk_version = 7;
   // https://opentelemetry.io/docs/specs/semconv/registry/attributes/telemetry/#telemetry-sdk-name
   string telemetry_sdk_name = 8;
+
+  // New first-class fields should be added only if:
+  // * Providing them is strongly recommended
+  // * They match a new or existing OTEL semantic convention
+  //
+  // Otherwise, `resources` should be used instead.
 }
