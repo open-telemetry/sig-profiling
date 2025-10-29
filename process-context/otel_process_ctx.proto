@@ -5,7 +5,18 @@ package otel_process_ctx.v1development;
 message OtelProcessCtx {
   // Additional key/value pairs as resources https://opentelemetry.io/docs/specs/otel/resource/sdk/
   // Similar to baggage https://opentelemetry.io/docs/concepts/signals/baggage/ / https://opentelemetry.io/docs/specs/otel/overview/#baggage-signal
+  //
+  // Providing resources is optional.
+  //
+  // If a key in this field would match one of the attributes already defined as a first-class field below (e.g. `service.name`),
+  // the first-class field must always take priority.
+  // Readers MAY choose to fallback to a value in `resources` if its corresponding first-class field is empty, or they CAN ignore it.
   map<string, string> resources = 1;
+
+  // We strongly recommend that the following first-class fields are provided, but they can be empty if needed.
+  // In particular for `deployment_environment_name` and `service_version` often need to be configured for a given application
+  // and cannot be inferred. For the others, see the semantic conventions documentation for recommended ways of setting them.
+
   // https://opentelemetry.io/docs/specs/semconv/registry/attributes/deployment/#deployment-environment-name
   string deployment_environment_name = 2;
   // https://opentelemetry.io/docs/specs/semconv/registry/attributes/service/#service-instance-id
