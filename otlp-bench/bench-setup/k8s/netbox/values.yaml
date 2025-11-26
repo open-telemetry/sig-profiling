@@ -1,0 +1,60 @@
+overrideUnitConfig:
+  listeners:
+    "0.0.0.0:8080":
+      pass: routes/main
+    "[::]:8080":
+      pass: routes/main
+    "0.0.0.0:8081":
+      pass: routes/status
+    "[::]:8081":
+      pass: routes/status
+  routes:
+    main:
+      - match:
+          uri: "/static/*"
+        action:
+          share: "/opt/netbox/netbox${uri}"
+      - action:
+          pass: applications/netbox
+    status:
+      - match:
+          uri: "/status/*"
+        action:
+          proxy: "http://unix:/opt/unit/unit.sock"
+  applications:
+    netbox:
+      type: "python 3"
+      path: /opt/netbox/netbox/
+      module: netbox.wsgi
+      home: /opt/netbox/venv
+      processes:
+        max: 20
+        spare: 5
+        idle_timeout: 120
+  access_log: /dev/stdout
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2
+    memory: 2Gi
+
+postgresql:
+  enabled: true
+  auth:
+    password: "netboxpassword"
+    postgresPassword: "postgrespassword"
+
+valkey:
+  enabled: true
+  auth:
+    password: "valkeypassword"
+
+tasksDatabase:
+  password: "valkeypassword"
+
+cachingDatabase:
+  password: "valkeypassword"
+

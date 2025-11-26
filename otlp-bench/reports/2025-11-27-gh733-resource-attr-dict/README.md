@@ -105,6 +105,12 @@ The proposed change is a rather significant departure from existing OTLP convent
 
 We approached this problem by collecting data from the eBPF profiler using the existing OTLP format (v1.9.0) and analyzing the impact of the proposed change by transforming the data as described above.
 
+The data was collected from a single-node minikube cluster running two workloads:
+* the [OpenTelemetry Demo](https://github.com/open-telemetry/opentelemetry-demo) environment (Astronomy Shop), a multi-service e-commerce application with ~15 microservices in Go, Java, Python, .NET, Node.js, Rust, PHP, and more; and,
+* [NetBox](https://github.com/netbox-community/netbox), a Django-based gunicorn WSGI application useful for evaluating profiler behavior with forking Python processes.
+
+A custom OpenTelemetry Collector with the [eBPF profiler](https://github.com/open-telemetry/opentelemetry-ebpf-profiler) captured profiles from all processes on the node and wrote them to disk. For detailed setup instructions, see [bench-setup/README.md](../../bench-setup/README.md).
+
 ### Data
 
 The raw data we collected (`*.otlp`) along with the results (`summary.csv`) and intermediate debug output (`*.otlp.<transformation>.txt`) can be downloaded [here](https://drive.google.com/drive/folders/1j4oS4WVw0GgxEryiqlZLUCalDQ_tbDIN?usp=sharing).
