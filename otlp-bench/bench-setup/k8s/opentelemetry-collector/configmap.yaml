@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-opentelemetry-collector-agent
+  namespace: otel
+  labels:
+    app.kubernetes.io/name: opentelemetry-collector
+    app.kubernetes.io/instance: otel-collector
+    app.kubernetes.io/part-of: opentelemetry-collector
+    app.kubernetes.io/component: agent-collector
+data:
+  relay: |
+    exporters:
+      debug: {}
+      file:
+        path: /var/lib/otel-profiles/profiles.proto
+        format: proto
+    extensions: {}
+    processors:
+      batch: {}
+      resourcedetection:
+        detectors: [env, system, ec2]
+        ec2:
+          resource_attributes:
+            cloud.account.id:
+              enabled: false
+        system:
+          resource_attributes:
+            host.arch:
+              enabled: true
+            host.cpu.family:
+              enabled: true
+            host.cpu.model.id:
+              enabled: true
+            host.cpu.model.name:
+              enabled: true
+            host.cpu.vendor.id:
+              enabled: true
+            host.interface:
+              enabled: true
+            host.name:
+              enabled: true
+            os.build.id:
+              enabled: true
+            os.description:
+              enabled: true
+            os.name:
+              enabled: true
+            os.type:
+              enabled: true
+            os.version:
+              enabled: true
+      k8sattributes:
+        extract:
+          metadata:
+          - k8s.namespace.name
+          - k8s.pod.name
+          - k8s.pod.hostname
+          - k8s.pod.ip
+          - k8s.pod.uid
+          - k8s.replicaset.uid
+          - k8s.replicaset.name
+          - k8s.deployment.uid
+          - k8s.deployment.name
+          - k8s.daemonset.uid
+          - k8s.daemonset.name
+          - k8s.statefulset.uid
+          - k8s.statefulset.name
+          - k8s.cronjob.uid
+          - k8s.cronjob.name
+          - k8s.job.uid
+          - k8s.job.name
+          - k8s.node.name
+          - k8s.cluster.uid
+          - k8s.container.name
+          - service.namespace
+          - service.name
+          - service.version
+          - service.instance.id
+        filter:
+          node_from_env_var: K8S_NODE_NAME
+        passthrough: false
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: container.id
+    receivers:
+      profiling:
+        reporter_interval: 60s
+    service:
+      pipelines:
+        profiles:
+          exporters:
+          - debug
+          - file
+          processors:
+          - k8sattributes
+          - resourcedetection
+          receivers:
+          - profiling
+      telemetry:
+        metrics:
+          readers:
+          - pull:
+              exporter:
+                prometheus:
+                  host: ${env:MY_POD_IP}
+                  port: 8888
+---
