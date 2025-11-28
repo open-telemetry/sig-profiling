@@ -137,7 +137,7 @@ func (a *App) run(_ context.Context, samples int, outDir string, files ...string
 			if err != nil {
 				return fmt.Errorf("calculate baseline sizes: %w", err)
 			}
-			stats.baseline = baselineSizes
+			stats.baseline = stats.baseline.Add(baselineSizes)
 
 			byProcess := splitByProcess(baseline)
 			if err := appendTextProfileToFile(outDir, baseFilename, "split-by-process", byProcess); err != nil {
@@ -147,7 +147,7 @@ func (a *App) run(_ context.Context, samples int, outDir string, files ...string
 			if err != nil {
 				return fmt.Errorf("calculate split-by-process sizes: %w", err)
 			}
-			stats.splitByProcess = byProcessSizes
+			stats.splitByProcess = stats.splitByProcess.Add(byProcessSizes)
 
 			resourceAttrDict := useResourceAttrDict(byProcess)
 			if err := appendTextProfileToFile(outDir, baseFilename, "resource-attr-dict", resourceAttrDict); err != nil {
@@ -157,7 +157,7 @@ func (a *App) run(_ context.Context, samples int, outDir string, files ...string
 			if err != nil {
 				return fmt.Errorf("calculate resource-attr-dict sizes: %w", err)
 			}
-			stats.resourceAttrDict = resourceAttrDictSizes
+			stats.resourceAttrDict = stats.resourceAttrDict.Add(resourceAttrDictSizes)
 		}
 		payloadCount := len(baselinePayloads)
 		writeRow(csvWriter, file, "baseline", payloadCount, stats.baseline)
@@ -175,6 +175,13 @@ func (a *App) run(_ context.Context, samples int, outDir string, files ...string
 type profileSize struct {
 	uncompressed int
 	gzip6        int
+}
+
+func (p profileSize) Add(other profileSize) profileSize {
+	return profileSize{
+		uncompressed: p.uncompressed + other.uncompressed,
+		gzip6:        p.gzip6 + other.gzip6,
+	}
 }
 
 func profileSizes(profile *cprofiles.ExportProfilesServiceRequest) (profileSize, error) {

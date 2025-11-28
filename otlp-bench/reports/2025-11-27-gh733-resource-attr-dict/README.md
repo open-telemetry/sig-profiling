@@ -6,13 +6,13 @@
 
 PR [#733](https://github.com/open-telemetry/opentelemetry-proto/pull/733) on the `opentelemetry-proto` repository aims to optimize duplicate `Resource` attribute keys and values in the same `ExportProfilesServiceRequest` payload.
 
-The report below concludes that the PR is effective and reduces the uncompressed payload size by `41%` and gzip-6 compressed payload size by `4%` for a k8s workload with frequent process forking when comparing the `split-by-process` vs `resource-attr-dict` approach.
+The report below concludes that the PR is effective and reduces the uncompressed payload size by `40%` and gzip-6 compressed payload size by `4%` for a k8s workload with frequent process forking when comparing the `split-by-process` vs `resource-attr-dict` approach.
 
 | file                       | encoding           | payloads | uncompressed_bytes | gzip_6_bytes |
 |----------------------------|--------------------|----------|--------------------|--------------|
-| testdata/k8s_big_fork.otlp | baseline           |       20 |            1546937 |       519968 |
-| testdata/k8s_big_fork.otlp | split-by-process   |       20 |            3423158 |       528406 |
-| testdata/k8s_big_fork.otlp | resource-attr-dict |       20 |            2021150 |       508097 |
+| testdata/k8s_big_fork.otlp | baseline           |       20 |           28979846 |      9321556 |
+| testdata/k8s_big_fork.otlp | split-by-process   |       20 |           62905497 |      9591208 |
+| testdata/k8s_big_fork.otlp | resource-attr-dict |       20 |           37766479 |      9220612 |
 
 A visualization of the `uncompressed_bytes` column is shown below.
 
@@ -134,18 +134,17 @@ The other workloads were taken from environments with either little or no proces
 
 The `uncompressed_gain` and `gzip_6_gain` columns show the percentage reduction in uncompressed and gzip-6 compressed payload sizes respectively when comparing the `resource-attr-dict` vs `split-by-process` approach.
 
-
 | file                       | encoding           | payloads | uncompressed_bytes | gzip_6_bytes | uncompressed_gain | gzip_6_gain |
 |----------------------------|--------------------|----------|--------------------|--------------|-------------------|-------------|
-| testdata/k8s_big_fork.otlp | baseline           |       20 |            1546937 |       519968 |                   |             |
-| testdata/k8s_big_fork.otlp | split-by-process   |       20 |            3423158 |       528406 |                   |             |
-| testdata/k8s_big_fork.otlp | resource-attr-dict |       20 |            2021150 |       508097 |            40.96% |       3.84% |
-| testdata/k8s_big.otlp      | baseline           |        4 |             563633 |       185697 |                   |             |
-| testdata/k8s_big.otlp      | split-by-process   |        4 |             805554 |       190498 |                   |             |
-| testdata/k8s_big.otlp      | resource-attr-dict |        4 |             603593 |       186018 |            25.07% |       2.35% |
-| testdata/k8s.otlp          | baseline           |        2 |              73091 |        28421 |                   |             |
-| testdata/k8s.otlp          | split-by-process   |        2 |              76653 |        29135 |                   |             |
-| testdata/k8s.otlp          | resource-attr-dict |        2 |              75596 |        28703 |             1.38% |       1.48% |
+| testdata/k8s_big_fork.otlp | baseline           |       20 |           28979846 |      9321556 |                   |             |
+| testdata/k8s_big_fork.otlp | split-by-process   |       20 |           62905497 |      9591208 |                   |             |
+| testdata/k8s_big_fork.otlp | resource-attr-dict |       20 |           37766479 |      9220612 |            39.96% |       3.86% |
+| testdata/k8s_big.otlp      | baseline           |        4 |            2238561 |       748049 |                   |             |
+| testdata/k8s_big.otlp      | split-by-process   |        4 |            3319782 |       764049 |                   |             |
+| testdata/k8s_big.otlp      | resource-attr-dict |        4 |            2436268 |       745387 |            26.61% |       2.44% |
+| testdata/k8s.otlp          | baseline           |        2 |             115707 |        46160 |                   |             |
+| testdata/k8s.otlp          | split-by-process   |        2 |             121339 |        47411 |                   |             |
+| testdata/k8s.otlp          | resource-attr-dict |        2 |             119653 |        46696 |             1.39% |       1.51% |
 | testdata/profile.otlp      | baseline           |        1 |              25115 |        10083 |                   |             |
 | testdata/profile.otlp      | split-by-process   |        1 |              26795 |        10265 |                   |             |
 | testdata/profile.otlp      | resource-attr-dict |        1 |              25536 |        10208 |             4.70% |       0.56% |
