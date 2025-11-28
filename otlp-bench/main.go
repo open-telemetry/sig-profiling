@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	cprofiles "github.com/open-telemetry/sig-profiling/otlp-bench/internal/otlpversions/gh733/opentelemetry/proto/collector/profiles/v1development"
 	common "github.com/open-telemetry/sig-profiling/otlp-bench/internal/otlpversions/gh733/opentelemetry/proto/common/v1"
@@ -406,7 +407,9 @@ func printProfile(out io.Writer, data *cprofiles.ExportProfilesServiceRequest) {
 			fmt.Fprintf(out, "  Scope: %s: %s\n", sp.Scope.Name, keyValuesString(sp.Scope.Attributes, data.Dictionary))
 			for _, p := range sp.Profiles {
 				typeStr, unitStr := data.Dictionary.StringTable[p.SampleType.TypeStrindex], data.Dictionary.StringTable[p.SampleType.UnitStrindex]
-				fmt.Fprintf(out, "    Profile: %s=%s\n", typeStr, unitStr)
+				end := time.Unix(int64(p.TimeUnixNano/1e9), int64(p.TimeUnixNano%1e9))
+				start := end.Add(-time.Duration(p.DurationNano))
+				fmt.Fprintf(out, "    Profile: %s=%s (%s - %s)\n", typeStr, unitStr, start.String(), end.String())
 				for _, s := range p.Samples {
 					attrs := []*profiles.KeyValueAndUnit{}
 					for _, ai := range s.AttributeIndices {
