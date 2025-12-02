@@ -308,7 +308,3 @@ This implementation follows the [OpenTelemetry Process Context specification](ht
 - Encodes resource attributes using OpenTelemetry Protocol Buffers Resource format
 - Supports both standard semantic conventions and custom resource attributes
 - Provides proper memory ordering guarantees for concurrent readers
-
-## License
-
-Unless explicitly stated otherwise, all files in this repository are licensed under the Apache License, Version 2.0. This product includes software developed at Datadog (https://www.datadoghq.com/) Copyright 2025 Datadog, Inc.
