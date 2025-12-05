@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locust-script
+  namespace: netbox-bench
+data:
+  locustfile.py: |
+    from locust import HttpUser, task, between
+
+    class NetBoxUser(HttpUser):
+        wait_time = between(1, 2.5)
+
+        @task
+        def index(self):
+            self.client.get("/")
+
+        @task
+        def login_page(self):
+            self.client.get("/login/")
+
+  entrypoint.sh: |
+    #!/bin/bash
+    pip install locust
+    locust -f /mnt/locust/locustfile.py --host http://netbox-bench.netbox-bench.svc.cluster.local:80 --users 100 --spawn-rate 10 --headless
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-generator
+  namespace: netbox-bench
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+    spec:
+      containers:
+      - name: locust
+        image: python:3.11-slim
+        command: ["/bin/bash", "/mnt/locust/entrypoint.sh"]
+        volumeMounts:
+        - name: locust-script
+          mountPath: /mnt/locust
+      volumes:
+      - name: locust-script
+        configMap:
+          name: locust-script
