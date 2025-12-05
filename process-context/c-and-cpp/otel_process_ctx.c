@@ -198,15 +198,19 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
     }
   }
 
-  // Step: Name the mapping so outside readers can:
+  // Step: Attempt to name the mapping so outside readers can:
   // * Find it by name
   // * Hook on prctl to detect when new mappings are published
   if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, published_state.mapping, mapping_size, "OTEL_CTX") == -1) {
-    // Naming an anonymous mapping is a Linux 5.17+ feature. On earlier versions, this method call can fail. Thus it's OK
-    // for this to fail because:
-    // 1. Things that hook on prctl are still able to see this call, even though it's not supported (TODO: Confirm this is actually the case)
-    // 2. As a fallback, on older kernels, it's possible to scan the mappings and look for the "OTEL_CTX" signature in the memory itself,
+    // Naming an anonymous mapping is an optional Linux 5.17+ feature (`CONFIG_ANON_VMA_NAME`).
+    // Many distros, such as Ubuntu and Arch enable it. On earlier kernel versions or kernels without the feature, this call can fail.
+    //
+    // It's OK for this to fail because (per-usecase):
+    // 1. "Find it by name" => As a fallback, it's possible to scan the mappings and look for the "OTEL_CTX" signature in the memory itself,
     //    after observing the mapping has the expected number of pages and permissions.
+    // 2. "Hook on prctl" => When hooking on prctl via eBPF it's still possible to see this call, even when it's not supported/enabled.
+    //    This works even on older kernels! For this reason we unconditionally make this call even on older kernels -- to
+    //    still allow detection via hooking onto prctl.
   }
 
   // All done!
@@ -373,14 +377,6 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
   // Note: The below parsing code is only for otel_process_ctx_read and is only provided for debugging
   // and testing purposes.
 
-  // Named mappings are supported on Linux 5.17+
-  static bool named_mapping_supported(void) {
-    struct utsname uts;
-    int major, minor;
-    if (uname(&uts) != 0 || sscanf(uts.release, "%d.%d", &major, &minor) != 2) return false;
-    return (major > 5) || (major == 5 && minor >= 17);
-  }
-
   static void *parse_mapping_start(char *line) {
     char *endptr = NULL;
     unsigned long long start = strtoull(line, &endptr, 16);
@@ -403,24 +399,23 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (start == 0 || end == 0 || end <= start) return false;
     if ((end - start) != size_for_mapping()) return false;
 
-    if (named_mapping_supported()) {
-      // On Linux 5.17+, check if the line ends with [anon:OTEL_CTX]
-      return memcmp(line + (line_len - name_len), "[anon:OTEL_CTX]", name_len) == 0;
-    } else {
-      // On older kernels, parse the address to to find the OTEL_CTX signature
-      void *addr = parse_mapping_start(line);
-      if (addr == NULL) return false;
+    // Check if the mapping is named
+    if (memcmp(line + (line_len - name_len), "[anon:OTEL_CTX]", name_len) == 0) return true;
 
-      // Read 8 bytes at the address using process_vm_readv (to avoid any issues with concurrency/races)
-      char buffer[8];
-      struct iovec local[] = {{.iov_base = buffer, .iov_len = sizeof(buffer)}};
-      struct iovec remote[] = {{.iov_base = addr, .iov_len = sizeof(buffer)}};
+    // To support legacy kernels and those with naming mappings disabled, let's check the mapping for the expected signature
 
-      ssize_t bytes_read = process_vm_readv(getpid(), local, 1, remote, 1, 0);
-      if (bytes_read != sizeof(buffer)) return false;
+    void *addr = parse_mapping_start(line);
+    if (addr == NULL) return false;
 
-      return memcmp(buffer, "OTEL_CTX", sizeof(buffer)) == 0;
-    }
+    // Read 8 bytes at the address using process_vm_readv (to avoid any issues with concurrency/races)
+    char buffer[8];
+    struct iovec local[] = {{.iov_base = buffer, .iov_len = sizeof(buffer)}};
+    struct iovec remote[] = {{.iov_base = addr, .iov_len = sizeof(buffer)}};
+
+    ssize_t bytes_read = process_vm_readv(getpid(), local, 1, remote, 1, 0);
+    if (bytes_read != sizeof(buffer)) return false;
+
+    return memcmp(buffer, "OTEL_CTX", sizeof(buffer)) == 0;
   }
 
   static otel_process_ctx_mapping *try_finding_mapping(void) {

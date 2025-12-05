@@ -26,21 +26,14 @@ if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-# Can we use the name of the mapping to find the context? This works on modern (5.17+) Linux versions
-kernel_version=$(uname -r | cut -d. -f1,2)
-major_version=$(echo "$kernel_version" | cut -d. -f1)
-minor_version=$(echo "$kernel_version" | cut -d. -f2)
+# Try to use the name of the mapping to find the context first
+line="$(grep -F '[anon:OTEL_CTX]' "/proc/$pid/maps" | head -n 1 || true)"
 
-if [ "$major_version" -ge 5 ] && { [ "$major_version" -gt 5 ] || [ "$minor_version" -ge 17 ]; }; then
-  line="$(grep -F '[anon:OTEL_CTX]' "/proc/$pid/maps" | head -n 1)"
-  if [ -z "$line" ]; then
-    echo "No [anon:OTEL_CTX] mapping found for PID $pid." >&2
-    exit 1
-  fi
-
+if [ -n "$line" ]; then
   start_addr="${line%%-*}"
+  found_via="named mapping"
 else
-  # Legacy kernel - scan for anonymous mappings that could be OTEL_CTX
+  # Fallback: scan for anonymous mappings that could be OTEL_CTX
   while IFS= read -r line; do
     # Parse start-end addresses and check if line contains required characteristics
     if [[ "$line" =~ "00:00 0" ]] && \
@@ -56,6 +49,7 @@ else
         candidate_data_b64="$(dd if="/proc/$pid/mem" bs=1 count=8 skip=$((16#$start_addr_hex)) status=none 2>/dev/null | base64 -w0)"
         if check_otel_signature "$candidate_data_b64"; then
           start_addr="$start_addr_hex"
+          found_via="mapping not named"
           break
         fi
       fi
@@ -63,12 +57,12 @@ else
   done < "/proc/$pid/maps"
 
   if [ -z "${start_addr:-}" ]; then
-    echo "No OTEL_CTX context found on legacy kernel." >&2
+    echo "No OTEL_CTX context found." >&2
     exit 1
   fi
 fi
 
-echo "Found OTEL context for PID $pid"
+echo "Found OTEL context for PID $pid ($found_via)"
 echo "Start address: $start_addr"
 
 # Read struct otel_process_ctx_mapping, encode as base64 so we can safely store it in a shell variable.
