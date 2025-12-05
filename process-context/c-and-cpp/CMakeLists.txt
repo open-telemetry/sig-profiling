@@ -19,7 +19,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2 -fPIC -ggdb3")
 
 # Source files
 set(SOURCES otel_process_ctx.c)
-set(SOURCES_CXX otel_process_ctx.cpp)
+configure_file(otel_process_ctx.c otel_process_ctx.cpp COPYONLY)
+set(SOURCES_CXX ${CMAKE_CURRENT_BINARY_DIR}/otel_process_ctx.cpp)
 
 # Create shared library
 add_library(otel_process_ctx SHARED ${SOURCES})
