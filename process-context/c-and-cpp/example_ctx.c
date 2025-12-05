@@ -46,7 +46,7 @@ bool read_and_print_ctx(const char* prefix) {
   }
 
   printf(
-    "%s: pid=%d, service=%s, instance=%s, env=%s, version=%s, sdk=%s/%s/%s",
+    "%s (for pid %d): service=%s, instance=%s, env=%s, version=%s, sdk=%s/%s/%s",
     prefix,
     getpid(),
     result.data.service_name,
