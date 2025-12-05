@@ -35,6 +35,8 @@ void burn_cpu_for(int seconds) {
   while (time(NULL) - t0 < seconds) {
     x += burn_cpu();
   }
+  printf("Press enter to continue...\n");
+  getchar();
 }
 
 bool read_and_print_ctx(const char* prefix) {
