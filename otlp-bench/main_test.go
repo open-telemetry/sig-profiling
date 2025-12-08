@@ -33,7 +33,7 @@ func TestApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read csv: %v\n%s\n", err, string(results))
 	}
-	assertEqual(t, records[0], []string{"file", "encoding", "payloads", "uncompressed_bytes", "gzip_6_bytes"})
+	assertEqual(t, records[0], []string{"file", "encoding", "payloads", "uncompressed_bytes", "gzip_6_bytes", "zstd_bytes"})
 	assertEqual(t, len(records), 4)
 }
 

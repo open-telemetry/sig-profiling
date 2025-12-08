@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
+
 	cprofiles "github.com/open-telemetry/sig-profiling/otlp-bench/internal/otlpversions/gh733/opentelemetry/proto/collector/profiles/v1development"
 	common "github.com/open-telemetry/sig-profiling/otlp-bench/internal/otlpversions/gh733/opentelemetry/proto/common/v1"
 	profiles "github.com/open-telemetry/sig-profiling/otlp-bench/internal/otlpversions/gh733/opentelemetry/proto/profiles/v1development"
@@ -100,7 +102,7 @@ func (a *App) run(_ context.Context, samples int, outDir string, files ...string
 
 	csvWriter := csv.NewWriter(outFile)
 
-	if err := csvWriter.Write([]string{"file", "encoding", "payloads", "uncompressed_bytes", "gzip_6_bytes"}); err != nil {
+	if err := csvWriter.Write([]string{"file", "encoding", "payloads", "uncompressed_bytes", "gzip_6_bytes", "zstd_bytes"}); err != nil {
 		return fmt.Errorf("write header row: %w", err)
 	}
 	for _, file := range files {
@@ -176,12 +178,14 @@ func (a *App) run(_ context.Context, samples int, outDir string, files ...string
 type profileSize struct {
 	uncompressed int
 	gzip6        int
+	zstd         int
 }
 
 func (p profileSize) Add(other profileSize) profileSize {
 	return profileSize{
 		uncompressed: p.uncompressed + other.uncompressed,
 		gzip6:        p.gzip6 + other.gzip6,
+		zstd:         p.zstd + other.zstd,
 	}
 }
 
@@ -191,21 +195,45 @@ func profileSizes(profile *cprofiles.ExportProfilesServiceRequest) (profileSize,
 		return profileSize{}, fmt.Errorf("marshal profile: %w", err)
 	}
 
-	var compressed bytes.Buffer
-	gw, err := gzip.NewWriterLevel(&compressed, gzip.DefaultCompression)
+	var gzipComp bytes.Buffer
+	gw, err := gzip.NewWriterLevel(&gzipComp, gzip.DefaultCompression)
 	if err != nil {
 		return profileSize{}, fmt.Errorf("create gzip writer: %w", err)
 	}
 	if _, err := gw.Write(uncompressed); err != nil {
-		return profileSize{}, fmt.Errorf("write compressed data: %w", err)
+		return profileSize{}, fmt.Errorf("write compressed data into gzip: %w", err)
 	}
 	if err := gw.Close(); err != nil {
 		return profileSize{}, fmt.Errorf("close gzip writer: %w", err)
 	}
 
+	zstdDst, err := os.CreateTemp("", "zstd-profileSizes")
+	if err != nil {
+		return profileSize{}, fmt.Errorf("failed to create temporary zstd destination file: %w", err)
+	}
+	defer os.Remove(zstdDst.Name())
+
+	zstdEncoder, err := zstd.NewWriter(zstdDst)
+	if err != nil {
+		return profileSize{}, fmt.Errorf("failed to create zstd encoder: %w", err)
+	}
+	if _, err := zstdEncoder.Write(uncompressed); err != nil {
+		return profileSize{}, fmt.Errorf("write compressed data into zstd: %w", err)
+	}
+	if err := zstdEncoder.Close(); err != nil {
+		return profileSize{}, fmt.Errorf("close zstd encoder: %w", err)
+	}
+
+	zstdInfo, err := zstdDst.Stat()
+	if err != nil {
+		return profileSize{}, fmt.Errorf("stat zstd file: %w", err)
+	}
+	zstdDst.Close()
+
 	return profileSize{
 		uncompressed: len(uncompressed),
-		gzip6:        compressed.Len(),
+		gzip6:        gzipComp.Len(),
+		zstd:         int(zstdInfo.Size()),
 	}, nil
 }
 
@@ -216,6 +244,7 @@ func writeRow(csvWriter *csv.Writer, file, encoding string, payloads int, sizes 
 		fmt.Sprintf("%d", payloads),
 		fmt.Sprintf("%d", sizes.uncompressed),
 		fmt.Sprintf("%d", sizes.gzip6),
+		fmt.Sprintf("%d", sizes.zstd),
 	})
 }
 
