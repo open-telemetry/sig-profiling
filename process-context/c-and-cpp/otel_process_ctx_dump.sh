@@ -82,11 +82,11 @@ signature="$(
 version="$(
   printf '%s' "$data_b64" | base64 -d | dd bs=1 skip=8 count=4 status=none | od -An -t u4 | tr -d ' '
 )"
-published_at_ns="$(
-  printf '%s' "$data_b64" | base64 -d | dd bs=1 skip=12 count=8 status=none | od -An -t u8 | tr -d ' '
-)"
 payload_size="$(
-  printf '%s' "$data_b64" | base64 -d | dd bs=1 skip=20 count=4 status=none | od -An -t u4 | tr -d ' '
+  printf '%s' "$data_b64" | base64 -d | dd bs=1 skip=12 count=4 status=none | od -An -t u4 | tr -d ' '
+)"
+published_at_ns="$(
+  printf '%s' "$data_b64" | base64 -d | dd bs=1 skip=16 count=8 status=none | od -An -t u8 | tr -d ' '
 )"
 payload_ptr_hex="$(
   printf '%s' "$data_b64" | base64 -d | dd bs=1 skip=24 count=8 status=none | od -An -t x8 | tr -d ' '
@@ -98,8 +98,8 @@ echo "  otel_process_ctx_version         : $version"
 # Convert nanoseconds to seconds for date command
 published_at_s=$((published_at_ns / 1000000000))
 published_at_pretty="$(date -d "@$published_at_s" '+%Y-%m-%d %H:%M:%S %Z')"
-echo "  otel_process_ctx_published_at_ns : $published_at_ns ($published_at_pretty)"
 echo "  otel_process_payload_size        : $payload_size"
+echo "  otel_process_ctx_published_at_ns : $published_at_ns ($published_at_pretty)"
 echo "  otel_process_payload             : 0x$payload_ptr_hex"
 
 echo "Payload dump ($payload_size bytes):"

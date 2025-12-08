@@ -76,8 +76,8 @@ static const otel_process_ctx_data empty_data = {
 typedef struct __attribute__((packed, aligned(8))) {
   char otel_process_ctx_signature[8];        // Always "OTEL_CTX"
   uint32_t otel_process_ctx_version;         // Always > 0, incremented when the data structure changes, currently v2
-  uint64_t otel_process_ctx_published_at_ns; // Always > 0, timestamp from when the context was published in nanoseconds since epoch
   uint32_t otel_process_payload_size;        // Always > 0, size of storage
+  uint64_t otel_process_ctx_published_at_ns; // Always > 0, timestamp from when the context was published in nanoseconds since epoch
   char *otel_process_payload;                // Always non-null, points to the storage for the data; expected to be a protobuf map of string key/value pairs, null-terminated
 } otel_process_ctx_mapping;
 
@@ -171,8 +171,8 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   *published_state.mapping = (otel_process_ctx_mapping) {
     .otel_process_ctx_signature = {0}, // Set in "Step: Populate the signature into the mapping" below
     .otel_process_ctx_version = 2,
-    .otel_process_ctx_published_at_ns = published_at_ns,
     .otel_process_payload_size = payload_size,
+    .otel_process_ctx_published_at_ns = published_at_ns,
     .otel_process_payload = published_state.payload
   };
 
