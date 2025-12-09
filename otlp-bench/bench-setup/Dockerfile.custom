@@ -1,0 +1,29 @@
+FROM alpine:3.19 AS certs
+
+RUN apk --update add ca-certificates
+
+
+FROM golang:1.25 AS build-stage
+
+WORKDIR /build
+
+COPY ./builder-manifest.yaml builder-manifest.yaml
+
+RUN --mount=type=cache,target=/root/.cache/go-build GO111MODULE=on go install go.opentelemetry.io/collector/cmd/builder@v0.139.0
+RUN --mount=type=cache,target=/root/.cache/go-build builder --config builder-manifest.yaml
+
+
+FROM alpine:3.19
+
+RUN apk --no-cache add ca-certificates util-linux
+
+ARG USER_UID=10001
+RUN adduser -D -u ${USER_UID} otel
+USER ${USER_UID}
+
+COPY --chmod=755 --from=build-stage /build/dist/otelcol-ebpf-profiler-custom /otelcol/otelcol-ebpf-profiler-custom
+
+ENTRYPOINT ["/otelcol/otelcol-ebpf-profiler-custom"]
+CMD ["--config", "/conf/relay.yaml"]
+
+EXPOSE 4317 4318 13133 14250 14268 6831 9411

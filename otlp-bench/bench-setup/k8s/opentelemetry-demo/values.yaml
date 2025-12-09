@@ -1,0 +1,35 @@
+components:
+  load-generator:
+    envOverrides:
+      - name: LOCUST_USERS
+        value: "200"
+      - name: LOCUST_SPAWN_RATE
+        value: "10"
+    resources:
+      limits:
+        memory: 10Gi
+  kafka:
+    resources:
+      limits:
+        memory: 1200Mi
+  fraud-detection:
+    resources:
+      limits:
+        memory: 500Mi
+  ad:
+    resources:
+      limits:
+        memory: 1Gi
+  accounting:
+    resources:
+      limits:
+        memory: 500Mi
+opensearch:
+  resources:
+    limits:
+      memory: 2Gi
+jaeger:
+  allInOne:
+    resources:
+      limits:
+        memory: 1Gi
