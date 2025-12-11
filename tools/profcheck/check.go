@@ -51,7 +51,6 @@ func (c ConformanceChecker) checkResourceProfiles(rp *profiles.ResourceProfiles,
 	if len(rp.ScopeProfiles) == 0 {
 		errs = errors.Join(errs, errors.New("resource profiles has no scope profiles"))
 	}
-	// TODO: Check attributes?
 	for i, sp := range rp.ScopeProfiles {
 		if err := c.checkScopeProfiles(sp, dict); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "scope_profiles[%d]", i))
@@ -65,7 +64,6 @@ func (c ConformanceChecker) checkScopeProfiles(sp *profiles.ScopeProfiles, dict 
 	if len(sp.Profiles) == 0 {
 		errs = errors.Join(errs, errors.New("scope profiles has no profiles"))
 	}
-	// TODO: Check attributes?
 	for i, profile := range sp.Profiles {
 		if err := c.checkProfile(profile, dict); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "profile[%d]", i))
@@ -86,7 +84,7 @@ func (c ConformanceChecker) checkProfile(prof *profiles.Profile, dict *profiles.
 		errs = errors.Join(errs, prefixErrorf(err, "period_type"))
 	}
 	var expectedShape SampleShape
-	for i, s := range prof.Sample {
+	for i, s := range prof.Samples {
 		err := c.checkSample(s, prof.TimeUnixNano, prof.TimeUnixNano+prof.DurationNano, dict, &expectedShape)
 		if err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "sample[%d]", i))
@@ -94,11 +92,6 @@ func (c ConformanceChecker) checkProfile(prof *profiles.Profile, dict *profiles.
 		// TODO: Check uniqueness of samples?
 		// Key: {stack_index, sorted(attribute_indices), link_index}
 		// Related: https://github.com/open-telemetry/opentelemetry-proto/issues/706.
-	}
-	for i, strIdx := range prof.CommentStrindices {
-		if err := c.checkIndex(len(dict.StringTable), strIdx); err != nil {
-			errs = errors.Join(errs, prefixErrorf(err, "comment_strindices[%d]", i))
-		}
 	}
 	return errs
 }
@@ -245,7 +238,7 @@ func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, di
 		if err := c.checkAttributeIndices(loc.AttributeIndices, dict); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].attribute_indices", locIdx))
 		}
-		for lineIdx, line := range loc.Line {
+		for lineIdx, line := range loc.Lines {
 			if err := c.checkLine(line, dict); err != nil {
 				errs = errors.Join(errs, prefixErrorf(err, "[%d].line[%d]", locIdx, lineIdx))
 			}
