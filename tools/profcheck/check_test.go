@@ -133,7 +133,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							TimestampsUnixNano: []uint64{99},
 						}},
 					}},
@@ -150,7 +150,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							TimestampsUnixNano: []uint64{100},
 						}},
 					}},
@@ -167,7 +167,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							TimestampsUnixNano: []uint64{110},
 						}},
 					}},
@@ -184,7 +184,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							TimestampsUnixNano: []uint64{111},
 						}},
 					}},
@@ -199,7 +199,7 @@ func TestCheckConformance(t *testing.T) {
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
-						Sample: []*profiles.Sample{{}},
+						Samples: []*profiles.Sample{{}},
 					}},
 				}},
 			}},
@@ -214,7 +214,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							Values:             []int64{1},
 							TimestampsUnixNano: []uint64{100, 101},
 						}},
@@ -230,7 +230,7 @@ func TestCheckConformance(t *testing.T) {
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							Values: []int64{1},
 						}},
 					}},
@@ -247,7 +247,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							TimestampsUnixNano: []uint64{100},
 						}},
 					}},
@@ -264,7 +264,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							Values:             []int64{1},
 							TimestampsUnixNano: []uint64{100},
 						}},
@@ -282,7 +282,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							Values: []int64{1},
 						}, {
 							TimestampsUnixNano: []uint64{100},
@@ -302,7 +302,7 @@ func TestCheckConformance(t *testing.T) {
 					Profiles: []*profiles.Profile{{
 						TimeUnixNano: 100,
 						DurationNano: 10,
-						Sample: []*profiles.Sample{{
+						Samples: []*profiles.Sample{{
 							Values: []int64{1},
 						}, {
 							TimestampsUnixNano: []uint64{100},
