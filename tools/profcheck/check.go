@@ -22,38 +22,73 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func CheckConformance(data *profiles.ProfilesData) error {
+// ConformanceChecker encapsulates OpenTelemetry Profiles signal checks for
+// conformance of the given proto to the signal requirements and conventions.
+type ConformanceChecker struct {
+	CheckDictionaryDuplicates bool
+	CheckSampleTimestampShape bool
+}
+
+func (c ConformanceChecker) Check(data *profiles.ProfilesData) error {
 	dict := data.Dictionary
 	if len(data.ResourceProfiles) == 0 {
 		return errors.New("resource profiles are empty")
 	}
-	for _, resourceProfiles := range data.ResourceProfiles {
-		// TODO: Check attributes?
-		for _, scopeProfiles := range resourceProfiles.ScopeProfiles {
-			// TODO: Check attributes?
-			for i, profile := range scopeProfiles.Profiles {
-				if err := checkProfile(profile, dict); err != nil {
-					return fmt.Errorf("profile %d: %v", i, err)
-				}
-			}
+	var errs error
+	for i, rp := range data.ResourceProfiles {
+		if err := c.checkResourceProfiles(rp, dict); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "resource_profiles[%d]", i))
 		}
 	}
-	return checkDictionary(dict)
+	if err := c.checkDictionary(dict); err != nil {
+		errs = errors.Join(errs, prefixErrorf(err, "dictionary"))
+	}
+	return errs
 }
 
-func checkProfile(prof *profiles.Profile, dict *profiles.ProfilesDictionary) error {
+func (c ConformanceChecker) checkResourceProfiles(rp *profiles.ResourceProfiles, dict *profiles.ProfilesDictionary) error {
 	var errs error
-	if err := checkAttributeIndices(prof.AttributeIndices, dict); err != nil {
+	if len(rp.ScopeProfiles) == 0 {
+		errs = errors.Join(errs, errors.New("resource profiles has no scope profiles"))
+	}
+	// TODO: Check attributes?
+	for i, sp := range rp.ScopeProfiles {
+		if err := c.checkScopeProfiles(sp, dict); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "scope_profiles[%d]", i))
+		}
+	}
+	return errs
+}
+
+func (c ConformanceChecker) checkScopeProfiles(sp *profiles.ScopeProfiles, dict *profiles.ProfilesDictionary) error {
+	var errs error
+	if len(sp.Profiles) == 0 {
+		errs = errors.Join(errs, errors.New("scope profiles has no profiles"))
+	}
+	// TODO: Check attributes?
+	for i, profile := range sp.Profiles {
+		if err := c.checkProfile(profile, dict); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "profile[%d]", i))
+		}
+	}
+	return errs
+}
+
+func (c ConformanceChecker) checkProfile(prof *profiles.Profile, dict *profiles.ProfilesDictionary) error {
+	var errs error
+	if err := c.checkAttributeIndices(prof.AttributeIndices, dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "attribute_indices"))
 	}
-	if err := checkValueType(prof.SampleType, dict); err != nil {
+	if err := c.checkValueType(prof.SampleType, dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "sample_type"))
 	}
-	if err := checkValueType(prof.PeriodType, dict); err != nil {
+	if err := c.checkValueType(prof.PeriodType, dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "period_type"))
 	}
+	var expectedShape SampleShape
 	for i, s := range prof.Sample {
-		if err := checkSample(s, prof.TimeUnixNano, prof.TimeUnixNano+prof.DurationNano, dict); err != nil {
+		err := c.checkSample(s, prof.TimeUnixNano, prof.TimeUnixNano+prof.DurationNano, dict, &expectedShape)
+		if err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "sample[%d]", i))
 		}
 		// TODO: Check uniqueness of samples?
@@ -61,88 +96,132 @@ func checkProfile(prof *profiles.Profile, dict *profiles.ProfilesDictionary) err
 		// Related: https://github.com/open-telemetry/opentelemetry-proto/issues/706.
 	}
 	for i, strIdx := range prof.CommentStrindices {
-		if err := checkIndex(len(dict.StringTable), strIdx); err != nil {
+		if err := c.checkIndex(len(dict.StringTable), strIdx); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "comment_strindices[%d]", i))
 		}
 	}
 	return errs
 }
 
-func checkSample(s *profiles.Sample, startUnixNano uint64, endUnixNano uint64, dict *profiles.ProfilesDictionary) error {
+// SampleShape represents the values vs timestamps combination of sample data.
+type SampleShape int
+
+const (
+	SampleShapeUnspecified    SampleShape = iota
+	SampleShapeValuesOnly                 // Values only, no timestamps
+	SampleShapeTimestampsOnly             // Timestamps only, no explicit values.
+	SampleShapeBoth                       // Both timestamps and values, as parallel arrays.
+)
+
+func (s SampleShape) String() string {
+	switch s {
+	case SampleShapeValuesOnly:
+		return "values_only"
+	case SampleShapeTimestampsOnly:
+		return "timestamps_only"
+	case SampleShapeBoth:
+		return "both_values_and_timestamps"
+	default:
+		return "unspecified"
+	}
+}
+
+func (c ConformanceChecker) checkSample(s *profiles.Sample, startUnixNano uint64, endUnixNano uint64, dict *profiles.ProfilesDictionary, expectedShape *SampleShape) error {
 	var errs error
-	if err := checkIndex(len(dict.StackTable), s.StackIndex); err != nil {
+	if err := c.checkIndex(len(dict.StackTable), s.StackIndex); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "stack_index"))
 	}
-	if err := checkAttributeIndices(s.AttributeIndices, dict); err != nil {
+	if err := c.checkAttributeIndices(s.AttributeIndices, dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "attribute_indices"))
 	}
-	if err := checkIndex(len(dict.LinkTable), s.LinkIndex); err != nil {
+	if err := c.checkIndex(len(dict.LinkTable), s.LinkIndex); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "link_index"))
 	}
 	for i, tsUnixNano := range s.TimestampsUnixNano {
-		if tsUnixNano < startUnixNano || tsUnixNano > endUnixNano {
-			errs = errors.Join(errs, fmt.Errorf("timestamps_unix_nano[%d]=%d is outside profile time range [%d, %d]", i, tsUnixNano, startUnixNano, endUnixNano))
+		if tsUnixNano < startUnixNano || tsUnixNano >= endUnixNano {
+			errs = errors.Join(errs, fmt.Errorf("timestamps_unix_nano[%d]=%d is outside profile time range [%d, %d)", i, tsUnixNano, startUnixNano, endUnixNano))
 		}
 	}
-	// TODO: Add a check for the value vs timestamp shapes.
+
+	var shape SampleShape
+	if hasValues, hasTimestamps := len(s.Values) > 0, len(s.TimestampsUnixNano) > 0; hasValues && hasTimestamps {
+		if len(s.Values) != len(s.TimestampsUnixNano) {
+			errs = errors.Join(errs, fmt.Errorf("values (len=%d) and timestamps_unix_nano (len=%d) must contain the same number of elements", len(s.Values), len(s.TimestampsUnixNano)))
+		}
+		shape = SampleShapeBoth
+	} else if hasValues {
+		shape = SampleShapeValuesOnly
+	} else if hasTimestamps {
+		shape = SampleShapeTimestampsOnly
+	} else {
+		errs = errors.Join(errs, errors.New("sample must have at least one values or timestamps_unix_nano entry"))
+		shape = SampleShapeUnspecified
+	}
+	if c.CheckSampleTimestampShape && shape != SampleShapeUnspecified {
+		if *expectedShape == SampleShapeUnspecified {
+			*expectedShape = shape
+		} else if shape != *expectedShape {
+			errs = errors.Join(errs, fmt.Errorf("sample shape %s does not match expected sample shape %s", shape, expectedShape))
+		}
+	}
 	return errs
 }
 
-func checkDictionary(dict *profiles.ProfilesDictionary) error {
+func (c ConformanceChecker) checkDictionary(dict *profiles.ProfilesDictionary) error {
 	var errs error
 
-	if err := checkMappingTable(dict.GetMappingTable(), dict); err != nil {
+	if err := c.checkMappingTable(dict.GetMappingTable(), dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "mapping_table"))
 	}
 
-	if err := checkLocationTable(dict.GetLocationTable(), dict); err != nil {
+	if err := c.checkLocationTable(dict.GetLocationTable(), dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "location_table"))
 	}
 
-	if err := checkFunctionTable(dict.GetFunctionTable(), dict); err != nil {
+	if err := c.checkFunctionTable(dict.GetFunctionTable(), dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "function_table"))
 	}
 
-	if err := checkLinkTable(dict.GetLinkTable()); err != nil {
+	if err := c.checkLinkTable(dict.GetLinkTable()); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "link_table"))
 	}
 
-	if err := checkStringTable(dict.GetStringTable()); err != nil {
+	if err := c.checkStringTable(dict.GetStringTable()); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "string_table"))
 	}
 
-	if err := checkAttributeTable(dict.GetAttributeTable(), len(dict.GetStringTable())); err != nil {
+	if err := c.checkAttributeTable(dict.GetAttributeTable(), len(dict.GetStringTable())); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "attribute_table"))
 	}
 
-	if err := checkStackTable(dict.GetStackTable(), len(dict.GetLocationTable())); err != nil {
+	if err := c.checkStackTable(dict.GetStackTable(), len(dict.GetLocationTable())); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "stack_table"))
 	}
 
 	return errs
 }
 
-func checkValueType(valueType *profiles.ValueType, dict *profiles.ProfilesDictionary) error {
+func (c ConformanceChecker) checkValueType(valueType *profiles.ValueType, dict *profiles.ProfilesDictionary) error {
 	var errs error
-	if err := checkIndex(len(dict.StringTable), valueType.UnitStrindex); err != nil {
+	if err := c.checkIndex(len(dict.StringTable), valueType.GetUnitStrindex()); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "unit_strindex"))
 	}
-	if err := checkIndex(len(dict.StringTable), valueType.TypeStrindex); err != nil {
+	if err := c.checkIndex(len(dict.StringTable), valueType.GetTypeStrindex()); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "type_strindex"))
 	}
 	return nil
 }
 
-func checkMappingTable(mappingTable []*profiles.Mapping, dict *profiles.ProfilesDictionary) error {
-	if err := checkZeroVal(mappingTable); err != nil {
-		return err
-	}
+func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, dict *profiles.ProfilesDictionary) error {
 	var errs error
+	if err := checkZeroVal(mappingTable); err != nil {
+		errs = errors.Join(errs, err)
+	}
 	for idx, m := range mappingTable {
-		if err := checkIndex(len(dict.StringTable), m.FilenameStrindex); err != nil {
+		if err := c.checkIndex(len(dict.StringTable), m.FilenameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].filename_strindex", idx))
 		}
-		if err := checkAttributeIndices(m.AttributeIndices, dict); err != nil {
+		if err := c.checkAttributeIndices(m.AttributeIndices, dict); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].attribute_indices", idx))
 		}
 		if !(m.MemoryStart == 0 && m.MemoryLimit == 0) && !(m.MemoryStart < m.MemoryLimit) {
@@ -154,20 +233,20 @@ func checkMappingTable(mappingTable []*profiles.Mapping, dict *profiles.Profiles
 	return errs
 }
 
-func checkLocationTable(locTable []*profiles.Location, dict *profiles.ProfilesDictionary) error {
-	if err := checkZeroVal(locTable); err != nil {
-		return err
-	}
+func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, dict *profiles.ProfilesDictionary) error {
 	var errs error
+	if err := checkZeroVal(locTable); err != nil {
+		errs = errors.Join(errs, err)
+	}
 	for locIdx, loc := range locTable {
-		if err := checkIndex(len(dict.MappingTable), loc.MappingIndex); err != nil {
+		if err := c.checkIndex(len(dict.MappingTable), loc.MappingIndex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].mapping_index", locIdx))
 		}
-		if err := checkAttributeIndices(loc.AttributeIndices, dict); err != nil {
+		if err := c.checkAttributeIndices(loc.AttributeIndices, dict); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].attribute_indices", locIdx))
 		}
 		for lineIdx, line := range loc.Line {
-			if err := checkLine(line, dict); err != nil {
+			if err := c.checkLine(line, dict); err != nil {
 				errs = errors.Join(errs, prefixErrorf(err, "[%d].line[%d]", locIdx, lineIdx))
 			}
 		}
@@ -177,36 +256,36 @@ func checkLocationTable(locTable []*profiles.Location, dict *profiles.ProfilesDi
 	return errs
 }
 
-func checkLine(line *profiles.Line, dict *profiles.ProfilesDictionary) error {
+func (c ConformanceChecker) checkLine(line *profiles.Line, dict *profiles.ProfilesDictionary) error {
 	var errs error
-	if err := checkIndex(len(dict.FunctionTable), line.FunctionIndex); err != nil {
+	if err := c.checkIndex(len(dict.FunctionTable), line.FunctionIndex); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "function_index"))
 	}
-	if err := checkNonNegative(line.Line); err != nil {
+	if err := c.checkNonNegative(line.Line); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "line"))
 	}
-	if err := checkNonNegative(line.Column); err != nil {
+	if err := c.checkNonNegative(line.Column); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "column"))
 	}
 	return errs
 }
 
-func checkFunctionTable(funcTable []*profiles.Function, dict *profiles.ProfilesDictionary) error {
-	if err := checkZeroVal(funcTable); err != nil {
-		return err
-	}
+func (c ConformanceChecker) checkFunctionTable(funcTable []*profiles.Function, dict *profiles.ProfilesDictionary) error {
 	var errs error
+	if err := checkZeroVal(funcTable); err != nil {
+		errs = errors.Join(errs, err)
+	}
 	for idx, fnc := range funcTable {
-		if err := checkIndex(len(dict.StringTable), fnc.NameStrindex); err != nil {
+		if err := c.checkIndex(len(dict.StringTable), fnc.NameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].name_strindex", idx))
 		}
-		if err := checkIndex(len(dict.StringTable), fnc.SystemNameStrindex); err != nil {
+		if err := c.checkIndex(len(dict.StringTable), fnc.SystemNameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].system_name_strindex", idx))
 		}
-		if err := checkIndex(len(dict.StringTable), fnc.FilenameStrindex); err != nil {
+		if err := c.checkIndex(len(dict.StringTable), fnc.FilenameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].filename_strindex", idx))
 		}
-		if err := checkNonNegative(fnc.StartLine); err != nil {
+		if err := c.checkNonNegative(fnc.StartLine); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].start_line", idx))
 		}
 	}
@@ -215,11 +294,11 @@ func checkFunctionTable(funcTable []*profiles.Function, dict *profiles.ProfilesD
 	return errs
 }
 
-func checkLinkTable(linkTable []*profiles.Link) error {
-	if err := checkZeroVal(linkTable); err != nil {
-		return err
-	}
+func (c ConformanceChecker) checkLinkTable(linkTable []*profiles.Link) error {
 	var errs error
+	if err := checkZeroVal(linkTable); err != nil {
+		errs = errors.Join(errs, err)
+	}
 	for idx, link := range linkTable[1:] {
 		if gotLen, wantLen := len(link.TraceId), 16; gotLen != wantLen {
 			errs = errors.Join(errs, fmt.Errorf("len([%d].trace_id) == %d, want %d", idx, gotLen, wantLen))
@@ -233,7 +312,7 @@ func checkLinkTable(linkTable []*profiles.Link) error {
 	return errs
 }
 
-func checkStringTable(strTable []string) error {
+func (c ConformanceChecker) checkStringTable(strTable []string) error {
 	if len(strTable) == 0 {
 		return errors.New("empty string table, must have at least empty string")
 	}
@@ -244,7 +323,9 @@ func checkStringTable(strTable []string) error {
 	strIdxs := map[string]int{}
 	for idx, s := range strTable {
 		if origIdx, ok := strIdxs[s]; ok {
-			errs = errors.Join(errs, fmt.Errorf("duplicate string at index %d, orig index %d: %s", idx, origIdx, s))
+			if c.CheckDictionaryDuplicates {
+				errs = errors.Join(errs, fmt.Errorf("duplicate string at index %d, orig index %d: %s", idx, origIdx, s))
+			}
 			continue
 		}
 		strIdxs[s] = idx
@@ -252,16 +333,16 @@ func checkStringTable(strTable []string) error {
 	return errs
 }
 
-func checkAttributeTable(attrTable []*profiles.KeyValueAndUnit, lenStrTable int) error {
-	if err := checkZeroVal(attrTable); err != nil {
-		return err
-	}
+func (c ConformanceChecker) checkAttributeTable(attrTable []*profiles.KeyValueAndUnit, lenStrTable int) error {
 	var errs error
+	if err := checkZeroVal(attrTable); err != nil {
+		errs = errors.Join(errs, err)
+	}
 	for pos, kvu := range attrTable {
-		if err := checkIndex(lenStrTable, kvu.KeyStrindex); err != nil {
+		if err := c.checkIndex(lenStrTable, kvu.KeyStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].key_strindex", pos))
 		}
-		if err := checkIndex(lenStrTable, kvu.UnitStrindex); err != nil {
+		if err := c.checkIndex(lenStrTable, kvu.UnitStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].unit_strindex", pos))
 		}
 	}
@@ -270,14 +351,14 @@ func checkAttributeTable(attrTable []*profiles.KeyValueAndUnit, lenStrTable int)
 	return errs
 }
 
-func checkStackTable(stackTable []*profiles.Stack, lenLocTable int) error {
-	if err := checkZeroVal(stackTable); err != nil {
-		return err
-	}
+func (c ConformanceChecker) checkStackTable(stackTable []*profiles.Stack, lenLocTable int) error {
 	var errs error
+	if err := checkZeroVal(stackTable); err != nil {
+		errs = errors.Join(errs, err)
+	}
 	for i, stack := range stackTable {
 		for j, locIndex := range stack.LocationIndices {
-			if err := checkIndex(lenLocTable, locIndex); err != nil {
+			if err := c.checkIndex(lenLocTable, locIndex); err != nil {
 				errs = errors.Join(errs, prefixErrorf(err, "[%d].location_indices[%d]", i, j))
 			}
 		}
@@ -303,16 +384,16 @@ func checkZeroVal[T any, P interface {
 	return nil
 }
 
-func checkAttributeIndices(attrIndices []int32, dict *profiles.ProfilesDictionary) error {
+func (c ConformanceChecker) checkAttributeIndices(attrIndices []int32, dict *profiles.ProfilesDictionary) error {
 	var errs error
 	keys := map[string]int{}
 	for pos, attrIdx := range attrIndices {
-		if err := checkIndex(len(dict.AttributeTable), attrIdx); err != nil {
+		if err := c.checkIndex(len(dict.AttributeTable), attrIdx); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d]", pos))
 			continue
 		}
 		attr := dict.AttributeTable[attrIdx]
-		if err := checkIndex(len(dict.StringTable), attr.KeyStrindex); err != nil {
+		if err := c.checkIndex(len(dict.StringTable), attr.KeyStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].key_strindex", pos))
 			continue
 		}
@@ -326,24 +407,24 @@ func checkAttributeIndices(attrIndices []int32, dict *profiles.ProfilesDictionar
 	return errs
 }
 
-func checkIndices(length int, indices []int32) error {
+func (c ConformanceChecker) checkIndices(length int, indices []int32) error {
 	var errs error
 	for i, idx := range indices {
-		if err := checkIndex(length, idx); err != nil {
+		if err := c.checkIndex(length, idx); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d]", i))
 		}
 	}
 	return errs
 }
 
-func checkIndex(length int, idx int32) error {
+func (c ConformanceChecker) checkIndex(length int, idx int32) error {
 	if idx < 0 || int(idx) >= length {
 		return fmt.Errorf("index %d is out of range [0..%d)", idx, length)
 	}
 	return nil
 }
 
-func checkNonNegative(n int64) error {
+func (c ConformanceChecker) checkNonNegative(n int64) error {
 	if n < 0 {
 		return fmt.Errorf("%d < 0, must be non-negative", n)
 	}

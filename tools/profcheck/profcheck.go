@@ -17,6 +17,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -24,13 +25,19 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+var checkDupes = flag.Bool("check-dupes", false, "Enable check for duplicates in the dictionary")
+var checkSampleShapes = flag.Bool("check-sample-shapes", true, "Enable check for sample shapes")
+
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Println("Usage: profcheck <file>")
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) != 1 {
+		fmt.Println("Usage: profcheck [-check-dupes] <file>")
 		os.Exit(1)
 	}
 
-	inputPath := os.Args[1]
+	inputPath := args[0]
 	contents, err := os.ReadFile(inputPath)
 	if err != nil {
 		fmt.Printf("Error reading file: %s\n", err)
@@ -43,7 +50,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := CheckConformance(&data); err != nil {
+	if err := (ConformanceChecker{CheckDictionaryDuplicates: *checkDupes, CheckSampleTimestampShape: *checkSampleShapes}).Check(&data); err != nil {
 		fmt.Printf("%s: conformance checks failed: %v\n", inputPath, err)
 	}
 	fmt.Printf("%s: conformance checks passed\n", inputPath)
