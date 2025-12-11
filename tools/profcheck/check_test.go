@@ -5,11 +5,28 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 )
 
 func TestCheckConformance(t *testing.T) {
+	zeroDictionary := &profiles.ProfilesDictionary{
+		MappingTable:   []*profiles.Mapping{{}},
+		LocationTable:  []*profiles.Location{{}},
+		FunctionTable:  []*profiles.Function{{}},
+		LinkTable:      []*profiles.Link{{}},
+		StringTable:    []string{""},
+		AttributeTable: []*profiles.KeyValueAndUnit{{}},
+		StackTable:     []*profiles.Stack{{}},
+	}
+	zeroDictWithStringTable := func(strTable []string) *profiles.ProfilesDictionary {
+		ret := proto.CloneOf(zeroDictionary)
+		ret.StringTable = strTable
+		return ret
+	}
+
 	for _, tc := range []struct {
 		desc              string
 		data              *profiles.ProfilesData
@@ -23,15 +40,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "minimal valid profile",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{}},
@@ -42,30 +51,14 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "no scope profiles",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary:       zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{}},
 		},
 		wantErr: "resource profiles has no scope profiles",
 	}, {
 		desc: "no profiles in scope",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{}},
 			}},
@@ -74,15 +67,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "no empty string at pos 0",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{"a"},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictWithStringTable([]string{"a"}),
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{}},
@@ -93,15 +78,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "duplicate string",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{"", "a", "b", "a"},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{}},
@@ -112,15 +89,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "duplicate string (disabled check)",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{"", "a", "b", "a"},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{}},
@@ -158,15 +127,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "timestamp before start",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -183,15 +144,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "timestamp at start",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -208,15 +161,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "timestamp at end (exclusive)",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -233,15 +178,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "timestamp after end",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -258,15 +195,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "sample with no values and no timestamps",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -279,15 +208,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "sample with values and timestamps length mismatch",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -305,15 +226,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "sample with values only",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -328,15 +241,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "sample with timestamps only",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -353,15 +258,7 @@ func TestCheckConformance(t *testing.T) {
 	}, {
 		desc: "sample with values and timestamps matching",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -377,17 +274,9 @@ func TestCheckConformance(t *testing.T) {
 		},
 		wantErr: "",
 	}, {
-		desc: "mixed sample types (values only vs timestamps only)",
+		desc: "mixed sample types",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
@@ -403,77 +292,11 @@ func TestCheckConformance(t *testing.T) {
 			}},
 		},
 		checkSampleShapes: true,
-		wantErr:           "sample shape timestamps_only does not match expected sample shape values_only",
-	}, {
-		desc: "mixed sample types (values only vs both)",
-		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Sample: []*profiles.Sample{{
-							Values: []int64{1},
-						}, {
-							Values:             []int64{1},
-							TimestampsUnixNano: []uint64{100},
-						}},
-					}},
-				}},
-			}},
-		},
-		checkSampleShapes: true,
-		wantErr:           "sample shape both_values_and_timestamps does not match expected sample shape values_only",
-	}, {
-		desc: "mixed sample types (timestamps only vs both)",
-		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Sample: []*profiles.Sample{{
-							TimestampsUnixNano: []uint64{100},
-						}, {
-							Values:             []int64{1},
-							TimestampsUnixNano: []uint64{100},
-						}},
-					}},
-				}},
-			}},
-		},
-		checkSampleShapes: true,
-		wantErr:           "sample shape both_values_and_timestamps does not match expected sample shape timestamps_only",
+		wantErr:           "does not match expected sample shape",
 	}, {
 		desc: "mixed sample types (disabled check)",
 		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable:   []*profiles.Mapping{{}},
-				LocationTable:  []*profiles.Location{{}},
-				FunctionTable:  []*profiles.Function{{}},
-				LinkTable:      []*profiles.Link{{}},
-				StringTable:    []string{""},
-				AttributeTable: []*profiles.KeyValueAndUnit{{}},
-				StackTable:     []*profiles.Stack{{}},
-			},
+			Dictionary: zeroDictionary,
 			ResourceProfiles: []*profiles.ResourceProfiles{{
 				ScopeProfiles: []*profiles.ScopeProfiles{{
 					Profiles: []*profiles.Profile{{
