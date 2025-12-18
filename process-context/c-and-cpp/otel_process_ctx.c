@@ -110,6 +110,10 @@ static uint64_t time_now_ns(void) {
   return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 }
 
+static bool ctx_is_published(otel_process_ctx_state state) {
+  return state.mapping != NULL && state.mapping != MAP_FAILED && getpid() == state.publisher_pid;
+}
+
 // The process context is designed to be read by an outside-of-process reader. Thus, for concurrency purposes the steps
 // on this method are ordered in a way to avoid races, or if not possible to avoid, to allow the reader to detect if there was a race.
 otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *data) {
@@ -219,7 +223,7 @@ bool otel_process_ctx_drop_current(void) {
 
   // The mapping only exists if it was created by the current process; if it was inherited by a fork it doesn't exist anymore
   // (due to the MADV_DONTFORK) and we don't need to do anything to it.
-  if (state.mapping != NULL && state.mapping != MAP_FAILED && getpid() == state.publisher_pid) {
+  if (ctx_is_published(state)) {
     success = munmap(state.mapping, sizeof(otel_process_ctx_mapping)) == 0;
   }
 
