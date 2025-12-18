@@ -26,43 +26,15 @@ if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-# Try to use the name of the mapping to find the context first
-line="$(grep -F -e '[anon_shmem:OTEL_CTX]' -e '/memfd:OTEL_CTX' "/proc/$pid/maps" | head -n 1 || true)"
-
-if [ -n "$line" ]; then
-  start_addr="${line%%-*}"
-  found_via="named mapping"
-else
-  # Fallback: scan for anonymous mappings that could be OTEL_CTX
-  while IFS= read -r line; do
-    # Parse start-end addresses and check if line contains required characteristics
-    if [[ "$line" =~ "00:00 0" ]] && \
-       [[ "$line" =~ r--p ]] && \
-       [[ "$line" =~ ^([0-9a-f]+)-([0-9a-f]+) ]]; then
-
-      start_addr_hex="${BASH_REMATCH[1]}"
-      end_addr_hex="${BASH_REMATCH[2]}"
-      size=$((16#$end_addr_hex - 16#$start_addr_hex))
-
-      # Check if size is 8192 bytes and verify signature
-      if [ "$size" -eq 8192 ]; then
-        candidate_data_b64="$(dd if="/proc/$pid/mem" bs=1 count=8 skip=$((16#$start_addr_hex)) status=none 2>/dev/null | base64 -w0)"
-        if check_otel_signature "$candidate_data_b64"; then
-          start_addr="$start_addr_hex"
-          found_via="mapping not named"
-          break
-        fi
-      fi
-    fi
-  done < "/proc/$pid/maps"
-
-  if [ -z "${start_addr:-}" ]; then
-    echo "No OTEL_CTX context found." >&2
-    exit 1
-  fi
+# Find the mapping by name
+if ! line="$(grep -F -m 1 -e '[anon_shmem:OTEL_CTX]' -e '/memfd:OTEL_CTX' "/proc/$pid/maps")"; then
+  echo "No OTEL_CTX context found." >&2
+  exit 1
 fi
 
-echo "Found OTEL context for PID $pid ($found_via)"
+start_addr="${line%%-*}"
+
+echo "Found OTEL context for PID $pid"
 echo "Start address: $start_addr"
 
 # Read struct otel_process_ctx_mapping, encode as base64 so we can safely store it in a shell variable.
