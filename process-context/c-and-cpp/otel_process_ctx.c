@@ -102,6 +102,7 @@ typedef struct {
  */
 static otel_process_ctx_state published_state;
 
+static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns, const otel_process_ctx_data *data);
 static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **out, uint32_t *out_size, otel_process_ctx_data data);
 
 static uint64_t time_now_ns(void) {
@@ -123,6 +124,8 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   if (published_at_ns == 0) {
     return (otel_process_ctx_result) {.success = false, .error_message = "Failed to get current time (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   }
+
+  if (ctx_is_published(published_state)) return otel_process_ctx_update(published_at_ns, data);
 
   // Step: Drop any previous context state it if it exists
   // No state should be around anywhere after this step.
@@ -231,6 +234,50 @@ bool otel_process_ctx_drop_current(void) {
   free(state.payload);
 
   return success;
+}
+
+static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns, const otel_process_ctx_data *data) {
+  if (data == NULL || !ctx_is_published(published_state)) {
+    return (otel_process_ctx_result) {.success = false, .error_message = "Unexpected: otel_process_ctx_data is NULL or context is not published (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+  }
+
+  // Step: Prepare the new payload to be published
+  // The payload SHOULD be ready and valid before trying to actually update the mapping.
+  uint32_t payload_size = 0;
+  char *payload;
+  otel_process_ctx_result result = otel_process_ctx_encode_protobuf_payload(&payload, &payload_size, *data);
+  if (!result.success) return result;
+
+  // Step: Zero out published_at_ns in the mapping
+  // This enables readers to detect that an update is in-progress
+  published_state.mapping->otel_process_ctx_published_at_ns = 0;
+
+  // Step: Synchronization - Make sure readers observe the zeroing above before anything else below
+  atomic_thread_fence(memory_order_seq_cst);
+
+  // Step: Install updated data
+  published_state.mapping->otel_process_payload_size = payload_size;
+  published_state.mapping->otel_process_payload = payload;
+
+  // Step: Synchronization - Make sure readers observe the updated data before anything else below
+  atomic_thread_fence(memory_order_seq_cst);
+
+  // Step: Install new published_at_ns
+  // The update is now complete -- readers that observe the new timestamp will observe the updated payload
+  published_state.mapping->otel_process_ctx_published_at_ns = published_at_ns;
+
+  // Step: Attempt to name the mapping so outside readers can detect the update
+  if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, published_state.mapping, sizeof(otel_process_ctx_mapping), OTEL_CTX_SIGNATURE) == -1) {
+    // It's OK for this to fail -- see otel_process_ctx_publish for why
+  }
+
+  // Step: Update bookkeeping
+  free(published_state.payload); // This was still pointing to the old payload
+  published_state.payload = payload;
+
+  // All done!
+
+  return (otel_process_ctx_result) {.success = true, .error_message = NULL};
 }
 
 // The caller is responsible for enforcing that value fits within UINT14_MAX
