@@ -117,7 +117,14 @@ static bool ctx_is_published(otel_process_ctx_state state) {
 // The process context is designed to be read by an outside-of-process reader. Thus, for concurrency purposes the steps
 // on this method are ordered in a way to avoid races, or if not possible to avoid, to allow the reader to detect if there was a race.
 otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *data) {
-  // Step: Drop any previous context it if it exists
+  if (!data) return (otel_process_ctx_result) {.success = false, .error_message = "otel_process_ctx_data is NULL (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+
+  uint64_t published_at_ns = time_now_ns();
+  if (published_at_ns == 0) {
+    return (otel_process_ctx_result) {.success = false, .error_message = "Failed to get current time (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+  }
+
+  // Step: Drop any previous context state it if it exists
   // No state should be around anywhere after this step.
   if (!otel_process_ctx_drop_current()) {
     return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop previous context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
@@ -125,7 +132,6 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
 
   // Step: Prepare the payload to be published
   // The payload SHOULD be ready and valid before trying to actually create the mapping.
-  if (!data) return (otel_process_ctx_result) {.success = false, .error_message = "otel_process_ctx_data is NULL (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   uint32_t payload_size = 0;
   otel_process_ctx_result result = otel_process_ctx_encode_protobuf_payload(&published_state.payload, &payload_size, *data);
   if (!result.success) return result;
@@ -169,12 +175,6 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
 
   // Step: Populate the mapping
   // The payload and any extra fields must come first and not be reordered with the signature by the compiler.
-
-  uint64_t published_at_ns = time_now_ns();
-  if (published_at_ns == 0) {
-    return (otel_process_ctx_result) {.success = false, .error_message = "Failed to get current time (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
-  }
-
   *published_state.mapping = (otel_process_ctx_mapping) {
     .otel_process_ctx_signature = {0}, // Set in "Step: Populate the signature into the mapping" below
     .otel_process_ctx_version = 2,
