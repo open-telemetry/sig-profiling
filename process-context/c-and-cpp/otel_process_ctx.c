@@ -157,7 +157,7 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
     if (otel_process_ctx_drop_current()) {
       return (otel_process_ctx_result) {.success = false, .error_message = "Failed to setup MADV_DONTFORK (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
     } else {
-      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop previous context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
     }
   }
 
@@ -195,7 +195,7 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
     if (otel_process_ctx_drop_current()) {
       return (otel_process_ctx_result) {.success = false, .error_message = "Failed to change permissions on mapping (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
     } else {
-      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop previous context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
     }
   }
 
