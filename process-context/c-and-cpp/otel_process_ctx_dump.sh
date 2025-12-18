@@ -27,7 +27,7 @@ if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
 fi
 
 # Try to use the name of the mapping to find the context first
-line="$(grep -F '[anon:OTEL_CTX]' "/proc/$pid/maps" | head -n 1 || true)"
+line="$(grep -F -e '[anon_shmem:OTEL_CTX]' -e '/memfd:OTEL_CTX' "/proc/$pid/maps" | head -n 1 || true)"
 
 if [ -n "$line" ]; then
   start_addr="${line%%-*}"

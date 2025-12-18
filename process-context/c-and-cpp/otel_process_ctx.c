@@ -144,11 +144,28 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
 
   // Step: Create the mapping
   published_state.publisher_pid = getpid(); // This allows us to detect in forks that we shouldn't touch the mapping
-  published_state.mapping = (otel_process_ctx_mapping *)
-    mmap(NULL, mapping_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (published_state.mapping == MAP_FAILED) {
+  int fd = memfd_create("OTEL_CTX", MFD_CLOEXEC | MFD_ALLOW_SEALING | MFD_NOEXEC_SEAL);
+  bool failed_to_close_fd = false;
+  if (fd >= 0) {
+    // Try to create mapping from memfd
+    if (ftruncate(fd, mapping_size) == -1) {
+      otel_process_ctx_drop_current();
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to truncate memfd (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+    }
+    published_state.mapping = (otel_process_ctx_mapping *) mmap(NULL, mapping_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    failed_to_close_fd = (close(fd) == -1);
+  } else {
+    // Fallback: Use an anonymous mapping instead
+    published_state.mapping = (otel_process_ctx_mapping *) mmap(NULL, mapping_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  }
+  if (published_state.mapping == MAP_FAILED || failed_to_close_fd) {
     otel_process_ctx_drop_current();
-    return (otel_process_ctx_result) {.success = false, .error_message = "Failed to allocate mapping (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+
+    if (failed_to_close_fd) {
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to close memfd (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+    } else {
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to allocate mapping (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+    }
   }
 
   // Step: Setup MADV_DONTFORK
