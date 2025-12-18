@@ -27,6 +27,7 @@
 #define ADD_QUOTES(x) ADD_QUOTES_HELPER(x)
 #define KEY_VALUE_LIMIT 4096
 #define UINT14_MAX 16383
+#define OTEL_CTX_SIGNATURE "OTEL_CTX"
 
 #ifndef PR_SET_VMA
   #define PR_SET_VMA            0x53564d41
@@ -74,7 +75,7 @@ static const otel_process_ctx_data empty_data = {
  * An outside-of-process reader will read this struct + otel_process_payload to get the data.
  */
 typedef struct __attribute__((packed, aligned(8))) {
-  char otel_process_ctx_signature[8];        // Always "OTEL_CTX"
+  char otel_process_ctx_signature[8];        // Always OTEL_CTX_SIGNATURE
   uint32_t otel_process_ctx_version;         // Always > 0, incremented when the data structure changes, currently v2
   uint32_t otel_process_payload_size;        // Always > 0, size of storage
   uint64_t otel_process_ctx_published_at_ns; // Always > 0, timestamp from when the context was published in nanoseconds since epoch
@@ -184,7 +185,7 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   // Step: Populate the signature into the mapping
   // The signature must come last and not be reordered with the fields above by the compiler. After this step, external readers
   // can read the signature and know that the payload is ready to be read.
-  memcpy(published_state.mapping->otel_process_ctx_signature, "OTEL_CTX", sizeof(published_state.mapping->otel_process_ctx_signature));
+  memcpy(published_state.mapping->otel_process_ctx_signature, OTEL_CTX_SIGNATURE, sizeof(published_state.mapping->otel_process_ctx_signature));
 
   // Step: Change permissions on the mapping to only read permission
   // We've observed the combination of anonymous mapping + a given number of pages + read-only permission is not very common,
@@ -201,12 +202,12 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   // Step: Attempt to name the mapping so outside readers can:
   // * Find it by name
   // * Hook on prctl to detect when new mappings are published
-  if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, published_state.mapping, mapping_size, "OTEL_CTX") == -1) {
+  if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, published_state.mapping, mapping_size, OTEL_CTX_SIGNATURE) == -1) {
     // Naming an anonymous mapping is an optional Linux 5.17+ feature (`CONFIG_ANON_VMA_NAME`).
     // Many distros, such as Ubuntu and Arch enable it. On earlier kernel versions or kernels without the feature, this call can fail.
     //
     // It's OK for this to fail because (per-usecase):
-    // 1. "Find it by name" => As a fallback, it's possible to scan the mappings and look for the "OTEL_CTX" signature in the memory itself,
+    // 1. "Find it by name" => As a fallback, it's possible to scan the mappings and look for the OTEL_CTX_SIGNATURE in the memory itself,
     //    after observing the mapping has the expected number of pages and permissions.
     // 2. "Hook on prctl" => When hooking on prctl via eBPF it's still possible to see this call, even when it's not supported/enabled.
     //    This works even on older kernels! For this reason we unconditionally make this call even on older kernels -- to
@@ -415,7 +416,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     ssize_t bytes_read = process_vm_readv(getpid(), local, 1, remote, 1, 0);
     if (bytes_read != sizeof(buffer)) return false;
 
-    return memcmp(buffer, "OTEL_CTX", sizeof(buffer)) == 0;
+    return memcmp(buffer, OTEL_CTX_SIGNATURE, sizeof(buffer)) == 0;
   }
 
   static otel_process_ctx_mapping *try_finding_mapping(void) {
@@ -584,7 +585,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
       return (otel_process_ctx_read_result) {.success = false, .error_message = "No OTEL_CTX mapping found (" __FILE__ ":" ADD_QUOTES(__LINE__) ")", .data = empty_data};
     }
 
-    if (strncmp(mapping->otel_process_ctx_signature, "OTEL_CTX", sizeof(mapping->otel_process_ctx_signature)) != 0 || mapping->otel_process_ctx_version != 2) {
+    if (strncmp(mapping->otel_process_ctx_signature, OTEL_CTX_SIGNATURE, sizeof(mapping->otel_process_ctx_signature)) != 0 || mapping->otel_process_ctx_version != 2) {
       return (otel_process_ctx_read_result) {.success = false, .error_message = "Invalid OTEL_CTX signature or version (" __FILE__ ":" ADD_QUOTES(__LINE__) ")", .data = empty_data};
     }
 
