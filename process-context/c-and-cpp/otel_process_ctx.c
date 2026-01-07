@@ -27,6 +27,7 @@
 #define ADD_QUOTES(x) ADD_QUOTES_HELPER(x)
 #define KEY_VALUE_LIMIT 4096
 #define UINT14_MAX 16383
+#define OTEL_CTX_SIGNATURE "OTEL_CTX"
 
 #ifndef PR_SET_VMA
   #define PR_SET_VMA            0x53564d41
@@ -74,7 +75,7 @@ static const otel_process_ctx_data empty_data = {
  * An outside-of-process reader will read this struct + otel_process_payload to get the data.
  */
 typedef struct __attribute__((packed, aligned(8))) {
-  char otel_process_ctx_signature[8];        // Always "OTEL_CTX"
+  char otel_process_ctx_signature[8];        // Always OTEL_CTX_SIGNATURE
   uint32_t otel_process_ctx_version;         // Always > 0, incremented when the data structure changes, currently v2
   uint32_t otel_process_payload_size;        // Always > 0, size of storage
   uint64_t otel_process_ctx_published_at_ns; // Always > 0, timestamp from when the context was published in nanoseconds since epoch
@@ -101,17 +102,8 @@ typedef struct {
  */
 static otel_process_ctx_state published_state;
 
+static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns, const otel_process_ctx_data *data);
 static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **out, uint32_t *out_size, otel_process_ctx_data data);
-
-// We use a mapping size of 2 pages explicitly as a hint when running on legacy kernels that don't support the
-// PR_SET_VMA_ANON_NAME prctl call; see below for more details.
-static ssize_t size_for_mapping(void) {
-  long page_size_bytes = sysconf(_SC_PAGESIZE);
-  if (page_size_bytes < 4096) {
-    return -1;
-  }
-  return page_size_bytes * 2;
-}
 
 static uint64_t time_now_ns(void) {
   struct timespec ts;
@@ -119,35 +111,60 @@ static uint64_t time_now_ns(void) {
   return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 }
 
+static bool ctx_is_published(otel_process_ctx_state state) {
+  return state.mapping != NULL && state.mapping != MAP_FAILED && getpid() == state.publisher_pid;
+}
+
 // The process context is designed to be read by an outside-of-process reader. Thus, for concurrency purposes the steps
 // on this method are ordered in a way to avoid races, or if not possible to avoid, to allow the reader to detect if there was a race.
 otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *data) {
-  // Step: Drop any previous context it if it exists
+  if (!data) return (otel_process_ctx_result) {.success = false, .error_message = "otel_process_ctx_data is NULL (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+
+  uint64_t published_at_ns = time_now_ns();
+  if (published_at_ns == 0) {
+    return (otel_process_ctx_result) {.success = false, .error_message = "Failed to get current time (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+  }
+
+  // Step: If the context has been published by this process, update it in place
+  if (ctx_is_published(published_state)) return otel_process_ctx_update(published_at_ns, data);
+
+  // Step: Drop any previous context state if it exists
   // No state should be around anywhere after this step.
   if (!otel_process_ctx_drop_current()) {
     return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop previous context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   }
 
-  // Step: Determine size for mapping
-  ssize_t mapping_size = size_for_mapping();
-  if (mapping_size == -1) {
-    return (otel_process_ctx_result) {.success = false, .error_message = "Failed to get page size (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
-  }
-
   // Step: Prepare the payload to be published
   // The payload SHOULD be ready and valid before trying to actually create the mapping.
-  if (!data) return (otel_process_ctx_result) {.success = false, .error_message = "otel_process_ctx_data is NULL (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   uint32_t payload_size = 0;
   otel_process_ctx_result result = otel_process_ctx_encode_protobuf_payload(&published_state.payload, &payload_size, *data);
   if (!result.success) return result;
 
   // Step: Create the mapping
+  const ssize_t mapping_size = sizeof(otel_process_ctx_mapping);
   published_state.publisher_pid = getpid(); // This allows us to detect in forks that we shouldn't touch the mapping
-  published_state.mapping = (otel_process_ctx_mapping *)
-    mmap(NULL, mapping_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (published_state.mapping == MAP_FAILED) {
+  int fd = memfd_create("OTEL_CTX", MFD_CLOEXEC | MFD_ALLOW_SEALING | MFD_NOEXEC_SEAL);
+  bool failed_to_close_fd = false;
+  if (fd >= 0) {
+    // Try to create mapping from memfd
+    if (ftruncate(fd, mapping_size) == -1) {
+      otel_process_ctx_drop_current();
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to truncate memfd (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+    }
+    published_state.mapping = (otel_process_ctx_mapping *) mmap(NULL, mapping_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    failed_to_close_fd = (close(fd) == -1);
+  } else {
+    // Fallback: Use an anonymous mapping instead
+    published_state.mapping = (otel_process_ctx_mapping *) mmap(NULL, mapping_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  }
+  if (published_state.mapping == MAP_FAILED || failed_to_close_fd) {
     otel_process_ctx_drop_current();
-    return (otel_process_ctx_result) {.success = false, .error_message = "Failed to allocate mapping (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+
+    if (failed_to_close_fd) {
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to close memfd (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+    } else {
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to allocate mapping (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+    }
   }
 
   // Step: Setup MADV_DONTFORK
@@ -156,18 +173,12 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
     if (otel_process_ctx_drop_current()) {
       return (otel_process_ctx_result) {.success = false, .error_message = "Failed to setup MADV_DONTFORK (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
     } else {
-      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop previous context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
     }
   }
 
   // Step: Populate the mapping
   // The payload and any extra fields must come first and not be reordered with the signature by the compiler.
-
-  uint64_t published_at_ns = time_now_ns();
-  if (published_at_ns == 0) {
-    return (otel_process_ctx_result) {.success = false, .error_message = "Failed to get current time (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
-  }
-
   *published_state.mapping = (otel_process_ctx_mapping) {
     .otel_process_ctx_signature = {0}, // Set in "Step: Populate the signature into the mapping" below
     .otel_process_ctx_version = 2,
@@ -184,30 +195,17 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   // Step: Populate the signature into the mapping
   // The signature must come last and not be reordered with the fields above by the compiler. After this step, external readers
   // can read the signature and know that the payload is ready to be read.
-  memcpy(published_state.mapping->otel_process_ctx_signature, "OTEL_CTX", sizeof(published_state.mapping->otel_process_ctx_signature));
-
-  // Step: Change permissions on the mapping to only read permission
-  // We've observed the combination of anonymous mapping + a given number of pages + read-only permission is not very common,
-  // so this is left as a hint for when running on older kernels and the naming the mapping feature below isn't available.
-  // For modern kernels, doing this is harmless so we do it unconditionally.
-  if (mprotect(published_state.mapping, mapping_size, PROT_READ) == -1) {
-    if (otel_process_ctx_drop_current()) {
-      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to change permissions on mapping (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
-    } else {
-      return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop previous context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
-    }
-  }
+  memcpy(published_state.mapping->otel_process_ctx_signature, OTEL_CTX_SIGNATURE, sizeof(published_state.mapping->otel_process_ctx_signature));
 
   // Step: Attempt to name the mapping so outside readers can:
   // * Find it by name
   // * Hook on prctl to detect when new mappings are published
-  if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, published_state.mapping, mapping_size, "OTEL_CTX") == -1) {
+  if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, published_state.mapping, mapping_size, OTEL_CTX_SIGNATURE) == -1) {
     // Naming an anonymous mapping is an optional Linux 5.17+ feature (`CONFIG_ANON_VMA_NAME`).
     // Many distros, such as Ubuntu and Arch enable it. On earlier kernel versions or kernels without the feature, this call can fail.
     //
     // It's OK for this to fail because (per-usecase):
-    // 1. "Find it by name" => As a fallback, it's possible to scan the mappings and look for the "OTEL_CTX" signature in the memory itself,
-    //    after observing the mapping has the expected number of pages and permissions.
+    // 1. "Find it by name" => As a fallback, it's possible to scan the mappings and for the memfd name.
     // 2. "Hook on prctl" => When hooking on prctl via eBPF it's still possible to see this call, even when it's not supported/enabled.
     //    This works even on older kernels! For this reason we unconditionally make this call even on older kernels -- to
     //    still allow detection via hooking onto prctl.
@@ -229,15 +227,58 @@ bool otel_process_ctx_drop_current(void) {
 
   // The mapping only exists if it was created by the current process; if it was inherited by a fork it doesn't exist anymore
   // (due to the MADV_DONTFORK) and we don't need to do anything to it.
-  if (state.mapping != NULL && state.mapping != MAP_FAILED && getpid() == state.publisher_pid) {
-    ssize_t mapping_size = size_for_mapping();
-    success = mapping_size > 0 && munmap(state.mapping, mapping_size) == 0;
+  if (ctx_is_published(state)) {
+    success = munmap(state.mapping, sizeof(otel_process_ctx_mapping)) == 0;
   }
 
   // The payload may have been inherited from a parent. This is a regular malloc so we need to free it so we don't leak.
   free(state.payload);
 
   return success;
+}
+
+static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns, const otel_process_ctx_data *data) {
+  if (data == NULL || !ctx_is_published(published_state)) {
+    return (otel_process_ctx_result) {.success = false, .error_message = "Unexpected: otel_process_ctx_data is NULL or context is not published (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+  }
+
+  // Step: Prepare the new payload to be published
+  // The payload SHOULD be ready and valid before trying to actually update the mapping.
+  uint32_t payload_size = 0;
+  char *payload;
+  otel_process_ctx_result result = otel_process_ctx_encode_protobuf_payload(&payload, &payload_size, *data);
+  if (!result.success) return result;
+
+  // Step: Zero out published_at_ns in the mapping
+  // This enables readers to detect that an update is in-progress
+  published_state.mapping->otel_process_ctx_published_at_ns = 0;
+
+  // Step: Synchronization - Make sure readers observe the zeroing above before anything else below
+  atomic_thread_fence(memory_order_seq_cst);
+
+  // Step: Install updated data
+  published_state.mapping->otel_process_payload_size = payload_size;
+  published_state.mapping->otel_process_payload = payload;
+
+  // Step: Synchronization - Make sure readers observe the updated data before anything else below
+  atomic_thread_fence(memory_order_seq_cst);
+
+  // Step: Install new published_at_ns
+  // The update is now complete -- readers that observe the new timestamp will observe the updated payload
+  published_state.mapping->otel_process_ctx_published_at_ns = published_at_ns;
+
+  // Step: Attempt to name the mapping so outside readers can detect the update
+  if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, published_state.mapping, sizeof(otel_process_ctx_mapping), OTEL_CTX_SIGNATURE) == -1) {
+    // It's OK for this to fail -- see otel_process_ctx_publish for why
+  }
+
+  // Step: Update bookkeeping
+  free(published_state.payload); // This was still pointing to the old payload
+  published_state.payload = payload;
+
+  // All done!
+
+  return (otel_process_ctx_result) {.success = true, .error_message = NULL};
 }
 
 // The caller is responsible for enforcing that value fits within UINT14_MAX
@@ -384,40 +425,6 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     return (void *)(uintptr_t) start;
   }
 
-  static bool is_otel_process_ctx_mapping(char *line) {
-    size_t name_len = sizeof("[anon:OTEL_CTX]") - 1;
-    size_t line_len = strlen(line);
-    if (line_len < name_len) return false;
-    if (line[line_len-1] == '\n') line[--line_len] = '\0';
-
-    // Validate expected permission
-    if (strstr(line, " r--p ") == NULL) return false;
-
-    // Validate expected context size
-    int64_t start, end;
-    if (sscanf(line, "%" PRIx64 "-%" PRIx64, &start, &end) != 2) return false;
-    if (start == 0 || end == 0 || end <= start) return false;
-    if ((end - start) != size_for_mapping()) return false;
-
-    // Check if the mapping is named
-    if (memcmp(line + (line_len - name_len), "[anon:OTEL_CTX]", name_len) == 0) return true;
-
-    // To support legacy kernels and those with naming mappings disabled, let's check the mapping for the expected signature
-
-    void *addr = parse_mapping_start(line);
-    if (addr == NULL) return false;
-
-    // Read 8 bytes at the address using process_vm_readv (to avoid any issues with concurrency/races)
-    char buffer[8];
-    struct iovec local[] = {{.iov_base = buffer, .iov_len = sizeof(buffer)}};
-    struct iovec remote[] = {{.iov_base = addr, .iov_len = sizeof(buffer)}};
-
-    ssize_t bytes_read = process_vm_readv(getpid(), local, 1, remote, 1, 0);
-    if (bytes_read != sizeof(buffer)) return false;
-
-    return memcmp(buffer, "OTEL_CTX", sizeof(buffer)) == 0;
-  }
-
   static otel_process_ctx_mapping *try_finding_mapping(void) {
     char line[8192];
     otel_process_ctx_mapping *result = NULL;
@@ -426,7 +433,8 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (!fp) return result;
 
     while (fgets(line, sizeof(line), fp)) {
-      if (is_otel_process_ctx_mapping(line)) {
+      bool is_process_ctx = strstr(line, "[anon_shmem:OTEL_CTX]") != NULL || strstr(line, "/memfd:OTEL_CTX") != NULL;
+      if (is_process_ctx) {
         result = (otel_process_ctx_mapping *)parse_mapping_start(line);
         break;
       }
@@ -584,7 +592,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
       return (otel_process_ctx_read_result) {.success = false, .error_message = "No OTEL_CTX mapping found (" __FILE__ ":" ADD_QUOTES(__LINE__) ")", .data = empty_data};
     }
 
-    if (strncmp(mapping->otel_process_ctx_signature, "OTEL_CTX", sizeof(mapping->otel_process_ctx_signature)) != 0 || mapping->otel_process_ctx_version != 2) {
+    if (strncmp(mapping->otel_process_ctx_signature, OTEL_CTX_SIGNATURE, sizeof(mapping->otel_process_ctx_signature)) != 0 || mapping->otel_process_ctx_version != 2) {
       return (otel_process_ctx_read_result) {.success = false, .error_message = "Invalid OTEL_CTX signature or version (" __FILE__ ":" ADD_QUOTES(__LINE__) ")", .data = empty_data};
     }
 
