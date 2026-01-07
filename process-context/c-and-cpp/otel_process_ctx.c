@@ -125,10 +125,10 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
     return (otel_process_ctx_result) {.success = false, .error_message = "Failed to get current time (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   }
 
-  // Step: If the context has published by this process, update it in place
+  // Step: If the context has been published by this process, update it in place
   if (ctx_is_published(published_state)) return otel_process_ctx_update(published_at_ns, data);
 
-  // Step: Drop any previous context state it if it exists
+  // Step: Drop any previous context state if it exists
   // No state should be around anywhere after this step.
   if (!otel_process_ctx_drop_current()) {
     return (otel_process_ctx_result) {.success = false, .error_message = "Failed to drop previous context (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
