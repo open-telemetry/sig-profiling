@@ -362,8 +362,8 @@ static void write_attribute(char **ptr, const char *key, const char *value) {
 
 // Encode the payload as protobuf bytes.
 //
-// This method implements an extremely compact but limited protobuf encoder for the Resource message.
-// It encodes all fields as attributes (KeyValue pairs).
+// This method implements an extremely compact but limited protobuf encoder for the ProcessContext message.
+// It encodes all fields as Resource attributes (KeyValue pairs).
 // For extra compact code, it fixes strings at up to 4096 bytes.
 static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **out, uint32_t *out_size, otel_process_ctx_data data) {
   const char *pairs[] = {
@@ -387,13 +387,19 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (!validation_result.success) return validation_result;
   }
 
-  size_t total_size = pairs_size + resources_pairs_size;
+  size_t resource_size = pairs_size + resources_pairs_size;
+  // ProcessContext wrapper: tag (1 byte) + resource length varint + resource content
+  size_t total_size = 1 + protobuf_varint_size(resource_size) + resource_size;
 
   char *encoded = (char *) calloc(total_size, 1);
   if (!encoded) {
     return (otel_process_ctx_result) {.success = false, .error_message = "Failed to allocate memory for payload (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   }
   char *ptr = encoded;
+
+  // ProcessContext.resource (field 1)
+  write_protobuf_tag(&ptr, 1);
+  write_protobuf_varint(&ptr, resource_size);
 
   for (size_t i = 0; pairs[i * 2] != NULL; i++) {
     write_attribute(&ptr, pairs[i * 2], pairs[i * 2 + 1]);
@@ -497,19 +503,28 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
 
     *data_out = empty_data;
 
+    // Parse ProcessContext wrapper - expect field 1 (resource)
+    uint8_t process_ctx_field;
+    if (!read_protobuf_tag(&ptr, end_ptr, &process_ctx_field) || process_ctx_field != 1) return false;
+
+    uint16_t resource_len;
+    if (!read_protobuf_varint(&ptr, end_ptr, &resource_len)) return false;
+    char *resource_end = ptr + resource_len;
+    if (resource_end > end_ptr) return false;
+
     size_t resource_index = 0;
     size_t resource_capacity = 201; // Allocate space for 100 pairs + NULL terminator entry
     data_out->resources = (const char **) calloc(resource_capacity, sizeof(char *));
     if (data_out->resources == NULL) return false;
 
-    while (ptr < end_ptr) {
+    while (ptr < resource_end) {
       uint8_t field_number;
-      if (!read_protobuf_tag(&ptr, end_ptr, &field_number) || field_number != 1) return false;
+      if (!read_protobuf_tag(&ptr, resource_end, &field_number) || field_number != 1) return false;
 
       uint16_t kv_len;
-      if (!read_protobuf_varint(&ptr, end_ptr, &kv_len)) return false;
+      if (!read_protobuf_varint(&ptr, resource_end, &kv_len)) return false;
       char *kv_end = ptr + kv_len;
-      if (kv_end > end_ptr) return false;
+      if (kv_end > resource_end) return false;
 
       bool key_found = false;
       bool value_found = false;
