@@ -7,4 +7,4 @@ require (
 	google.golang.org/protobuf v1.36.10
 )
 
-require go.opentelemetry.io/proto/otlp v1.8.0
+require go.opentelemetry.io/proto/otlp v1.9.0
