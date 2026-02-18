@@ -72,7 +72,8 @@ These can be set in your own build system as needed.
 
 ### Protocol Buffers Definitions
 
-- **`resource.proto`** - OpenTelemetry Resource protobuf definition (extracted from OpenTelemetry protocol)
+- **`process_context.proto`** - OpenTelemetry Process Context protobuf definition
+- **`resource.proto`** - OpenTelemetry Resource protobuf definition
 - **`common.proto`** - OpenTelemetry common types protobuf definition (AnyValue, KeyValue, etc.)
 
 These proto files are included for reference and for use with `protoc` when decoding the payload with the dump script. The implementation includes its own minimal protobuf encoder/decoder and does not depend on the protobuf library.
@@ -208,18 +209,18 @@ sudo ./otel_process_ctx_dump.sh <pid>
 ```
 Found OTEL context for PID 267023
 Start address: 756f28ce1000
-00000000  4f 54 45 4c 5f 43 54 58  02 00 00 00 0b 68 55 47  |OTEL_CTX.....hUG|
-00000010  70 24 7d 18 50 01 00 00  a0 82 6d 7e 6a 5f 00 00  |p$}.P.....m~j_..|
+00000000  4f 54 45 4c 5f 43 54 58  02 00 00 00 53 01 00 00  |OTEL_CTX....S...|
+00000010  4c 27 98 d5 cc aa 91 18  a0 b2 28 1e ee 5c 00 00  |L'........(..\..|
 00000020
 Parsed struct:
   otel_process_ctx_signature       : "OTEL_CTX"
   otel_process_ctx_version         : 2
-  otel_process_ctx_published_at_ns : 1764606693650819083 (2025-12-01 16:31:33 GMT)
-  otel_process_payload_size        : 336
-  otel_process_payload             : 0x00005f6a7e6d82a0
-Payload dump (336 bytes):
-00000000  0a 25 0a 1b 64 65 70 6c  6f 79 6d 65 6e 74 2e 65  |.%..deployment.e|
-00000010  6e 76 69 72 6f 6e 6d 65  6e 74 2e 6e 61 6d 65 12  |nvironment.name.|
+  otel_process_payload_size        : 339
+  otel_process_ctx_published_at_ns : 1770383925266884428 (2026-02-06 13:18:45 GMT)
+  otel_process_payload             : 0x00005cee1e28b2a0
+Payload dump (339 bytes):
+00000000  0a d0 02 0a 25 0a 1b 64  65 70 6c 6f 79 6d 65 6e  |....%..deploymen|
+00000010  74 2e 65 6e 76 69 72 6f  6e 6d 65 6e 74 2e 6e 61  |t.environment.na|
 ...
 ```
 
@@ -227,24 +228,25 @@ If `protoc` is installed and the proto files are available, the script will also
 
 ```
 Protobuf decode:
-attributes {
-  key: "deployment.environment.name"
-  value {
-    string_value: "prod"
+resource {
+  attributes {
+    key: "deployment.environment.name"
+    value {
+      string_value: "prod"
+    }
   }
-}
-attributes {
-  key: "service.instance.id"
-  value {
-    string_value: "123d8444-2c7e-46e3-89f6-6217880f7123"
+  attributes {
+    key: "service.instance.id"
+    value {
+      string_value: "123d8444-2c7e-46e3-89f6-6217880f7123"
+    }
   }
-}
-attributes {
-  key: "service.name"
-  value {
-    string_value: "my-service"
+  attributes {
+    key: "service.name"
+    value {
+      string_value: "my-service"
+    }
   }
-}
 ...
 ```
 
@@ -298,13 +300,3 @@ When integrating this into an OpenTelemetry SDK or application:
 5. **Check result codes**: Always check the `success` field of the result and log errors appropriately.
 
 6. **Consider no-op builds**: For non-Linux platforms, use the no-op variant or define `OTEL_PROCESS_CTX_NOOP=1`.
-
-## Specification Compliance
-
-This implementation follows the [OpenTelemetry Process Context specification](https://github.com/open-telemetry/opentelemetry-specification/pull/4719/). Key aspects:
-
-- Uses the `OTEL_CTX` signature for discoverability
-- Stores data in version 2 format (packed struct + protobuf payload)
-- Encodes resource attributes using OpenTelemetry Protocol Buffers Resource format
-- Supports both standard semantic conventions and custom resource attributes
-- Provides proper memory ordering guarantees for concurrent readers
