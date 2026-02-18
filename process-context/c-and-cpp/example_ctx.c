@@ -74,6 +74,17 @@ bool read_and_print_ctx(const char* prefix) {
 
   print_key_value_pairs("resource_attributes", result.data.resource_attributes);
   print_key_value_pairs("extra_attributes", result.data.extra_attributes);
+  if (result.data.thread_ctx_config) {
+    printf(", thread_ctx_config.schema_version=%s", result.data.thread_ctx_config->schema_version);
+    const char **map = result.data.thread_ctx_config->attribute_key_map;
+    if (map && map[0] != NULL) {
+      printf(", thread_ctx_config.attribute_key_map=");
+      for (int i = 0; map[i] != NULL; i++) {
+        if (i > 0) printf(",");
+        printf("%s", map[i]);
+      }
+    }
+  }
   printf("\n");
 
   otel_process_ctx_read_drop(&result);
@@ -104,7 +115,7 @@ int update_and_fork(void) {
     .telemetry_sdk_language = "c",
     .telemetry_sdk_version = "1.2.3",
     .telemetry_sdk_name = "example_ctx.c",
-    .resource_attributes = resource_attributes
+    .resource_attributes = resource_attributes,
   };
 
   otel_process_ctx_result result = otel_process_ctx_publish(&update_data);
@@ -174,6 +185,12 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  const char *attribute_key_map[] = {"http_route", "http_method", "user_id", NULL};
+  otel_thread_ctx_config_data thread_ctx_config = {
+    .schema_version = "tlsdesc_v1_dev",
+    .attribute_key_map = attribute_key_map,
+  };
+
   otel_process_ctx_data data = {
     .deployment_environment_name = "prod",
     .service_instance_id = "123d8444-2c7e-46e3-89f6-6217880f7123",
@@ -183,7 +200,8 @@ int main(int argc, char* argv[]) {
     .telemetry_sdk_version = "1.2.3",
     .telemetry_sdk_name = "example_ctx.c",
     .resource_attributes = resource_attributes,
-    .extra_attributes = extra_attributes
+    .extra_attributes = extra_attributes,
+    .thread_ctx_config = &thread_ctx_config,
   };
 
   otel_process_ctx_result result = otel_process_ctx_publish(&data);
