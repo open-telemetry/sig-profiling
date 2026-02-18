@@ -39,6 +39,18 @@ void burn_cpu_for(int seconds) {
   getchar();
 }
 
+static void print_key_value_pairs(const char *label, const char **pairs) {
+  if (pairs && pairs[0] != NULL) {
+    printf(", %s=", label);
+    for (int i = 0; pairs[i] != NULL; i += 2) {
+      if (i > 0) printf(",");
+      printf("%s=%s", pairs[i], pairs[i + 1]);
+    }
+  } else {
+    printf(", %s=(none)", label);
+  }
+}
+
 bool read_and_print_ctx(const char* prefix) {
   otel_process_ctx_read_result result = otel_process_ctx_read();
 
@@ -60,22 +72,14 @@ bool read_and_print_ctx(const char* prefix) {
     result.data.telemetry_sdk_version
   );
 
-  if (result.data.resources && result.data.resources[0] != NULL) {
-    printf(", resources=");
-    for (int i = 0; result.data.resources[i] != NULL; i += 2) {
-      if (i > 0) printf(",");
-      printf("%s=%s", result.data.resources[i], result.data.resources[i + 1]);
-    }
-  } else {
-    printf(", resources=(none)");
-  }
+  print_key_value_pairs("resource_attributes", result.data.resource_attributes);
   printf("\n");
 
   otel_process_ctx_read_drop(&result);
   return true;
 }
 
-const char *resources[] = {
+const char *resource_attributes[] = {
   "resource.key1", "resource.value1",
   "resource.key2", "resource.value2",
   NULL
@@ -94,7 +98,7 @@ int update_and_fork(void) {
     .telemetry_sdk_language = "c",
     .telemetry_sdk_version = "1.2.3",
     .telemetry_sdk_name = "example_ctx.c",
-    .resources = resources
+    .resource_attributes = resource_attributes
   };
 
   otel_process_ctx_result result = otel_process_ctx_publish(&update_data);
@@ -119,7 +123,7 @@ int update_and_fork(void) {
       .telemetry_sdk_language = "c",
       .telemetry_sdk_version = "1.2.3",
       .telemetry_sdk_name = "example_ctx.c",
-      .resources = NULL
+      .resource_attributes = NULL
     };
 
     result = otel_process_ctx_publish(&child_data);
@@ -172,7 +176,7 @@ int main(int argc, char* argv[]) {
     .telemetry_sdk_language = "c",
     .telemetry_sdk_version = "1.2.3",
     .telemetry_sdk_name = "example_ctx.c",
-    .resources = resources
+    .resource_attributes = resource_attributes
   };
 
   otel_process_ctx_result result = otel_process_ctx_publish(&data);

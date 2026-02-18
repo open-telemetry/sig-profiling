@@ -42,7 +42,7 @@ static const otel_process_ctx_data empty_data = {
   .telemetry_sdk_language = NULL,
   .telemetry_sdk_version = NULL,
   .telemetry_sdk_name = NULL,
-  .resources = NULL
+  .resource_attributes = NULL
 };
 
 #if (defined(OTEL_PROCESS_CTX_NOOP) && OTEL_PROCESS_CTX_NOOP) || !defined(__linux__)
@@ -381,13 +381,13 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
   otel_process_ctx_result validation_result = validate_and_calculate_protobuf_payload_size(&pairs_size, (const char **) pairs);
   if (!validation_result.success) return validation_result;
 
-  size_t resources_pairs_size = 0;
-  if (data.resources != NULL) {
-    validation_result = validate_and_calculate_protobuf_payload_size(&resources_pairs_size, data.resources);
+  size_t resource_attributes_pairs_size = 0;
+  if (data.resource_attributes != NULL) {
+    validation_result = validate_and_calculate_protobuf_payload_size(&resource_attributes_pairs_size, data.resource_attributes);
     if (!validation_result.success) return validation_result;
   }
 
-  size_t resource_size = pairs_size + resources_pairs_size;
+  size_t resource_size = pairs_size + resource_attributes_pairs_size;
   // ProcessContext wrapper: tag (1 byte) + resource length varint + resource content
   size_t total_size = 1 + protobuf_varint_size(resource_size) + resource_size;
 
@@ -405,8 +405,8 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     write_attribute(&ptr, pairs[i * 2], pairs[i * 2 + 1]);
   }
 
-  for (size_t i = 0; data.resources != NULL && data.resources[i * 2] != NULL; i++) {
-    write_attribute(&ptr, data.resources[i * 2], data.resources[i * 2 + 1]);
+  for (size_t i = 0; data.resource_attributes != NULL && data.resource_attributes[i * 2] != NULL; i++) {
+    write_attribute(&ptr, data.resource_attributes[i * 2], data.resource_attributes[i * 2 + 1]);
   }
 
   *out = encoded;
@@ -514,8 +514,8 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
 
     size_t resource_index = 0;
     size_t resource_capacity = 201; // Allocate space for 100 pairs + NULL terminator entry
-    data_out->resources = (const char **) calloc(resource_capacity, sizeof(char *));
-    if (data_out->resources == NULL) return false;
+    data_out->resource_attributes = (const char **) calloc(resource_capacity, sizeof(char *));
+    if (data_out->resource_attributes == NULL) return false;
 
     while (ptr < resource_end) {
       uint8_t field_number;
@@ -571,8 +571,8 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
           free(value);
           return false;
         }
-        data_out->resources[resource_index] = key;
-        data_out->resources[resource_index + 1] = value;
+        data_out->resource_attributes[resource_index] = key;
+        data_out->resource_attributes[resource_index + 1] = value;
         resource_index += 2;
       }
     }
@@ -595,9 +595,9 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (data.telemetry_sdk_language) free((void *)data.telemetry_sdk_language);
     if (data.telemetry_sdk_version) free((void *)data.telemetry_sdk_version);
     if (data.telemetry_sdk_name) free((void *)data.telemetry_sdk_name);
-    if (data.resources) {
-      for (int i = 0; data.resources[i] != NULL; i++) free((void *)data.resources[i]);
-      free((void *)data.resources);
+    if (data.resource_attributes) {
+      for (int i = 0; data.resource_attributes[i] != NULL; i++) free((void *)data.resource_attributes[i]);
+      free((void *)data.resource_attributes);
     }
   }
 
