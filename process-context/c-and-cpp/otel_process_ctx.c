@@ -439,7 +439,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (!fp) return result;
 
     while (fgets(line, sizeof(line), fp)) {
-      bool is_process_ctx = strstr(line, "[anon_shmem:OTEL_CTX]") != NULL || strstr(line, "/memfd:OTEL_CTX") != NULL;
+      bool is_process_ctx = strstr(line, "[anon_shmem:OTEL_CTX]") != NULL || strstr(line, "[anon:OTEL_CTX]") != NULL || strstr(line, "/memfd:OTEL_CTX") != NULL;
       if (is_process_ctx) {
         result = (otel_process_ctx_mapping *)parse_mapping_start(line);
         break;
