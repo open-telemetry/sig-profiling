@@ -58,6 +58,10 @@ typedef struct {
   // Can be NULL if no resource attributes are needed; if non-NULL, this array MUST be terminated with a NULL entry.
   // Every even entry is a key, every odd entry is a value (E.g. "key1", "value1", "key2", "value2", NULL).
   const char **resource_attributes;
+  // Additional key/value pairs as extra attributes (ProcessContext.extra_attributes in process_context.proto)
+  // Can be NULL if no extra attributes are needed; if non-NULL, this array MUST be terminated with a NULL entry.
+  // Every even entry is a key, every odd entry is a value (E.g. "key1", "value1", "key2", "value2", NULL).
+  const char **extra_attributes;
 } otel_process_ctx_data;
 
 /** Number of entries in the `otel_process_ctx_data` struct. Can be used to easily detect when the struct is updated. */

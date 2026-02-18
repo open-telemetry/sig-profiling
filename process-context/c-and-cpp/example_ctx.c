@@ -44,7 +44,7 @@ static void print_key_value_pairs(const char *label, const char **pairs) {
     printf(", %s=", label);
     for (int i = 0; pairs[i] != NULL; i += 2) {
       if (i > 0) printf(",");
-      printf("%s=%s", pairs[i], pairs[i + 1]);
+      printf("%s:%s", pairs[i], pairs[i + 1]);
     }
   } else {
     printf(", %s=(none)", label);
@@ -73,6 +73,7 @@ bool read_and_print_ctx(const char* prefix) {
   );
 
   print_key_value_pairs("resource_attributes", result.data.resource_attributes);
+  print_key_value_pairs("extra_attributes", result.data.extra_attributes);
   printf("\n");
 
   otel_process_ctx_read_drop(&result);
@@ -82,6 +83,11 @@ bool read_and_print_ctx(const char* prefix) {
 const char *resource_attributes[] = {
   "resource.key1", "resource.value1",
   "resource.key2", "resource.value2",
+  NULL
+};
+
+const char *extra_attributes[] = {
+  "example_extra_attribute_foo", "example_extra_attribute_foo_value",
   NULL
 };
 
@@ -176,7 +182,8 @@ int main(int argc, char* argv[]) {
     .telemetry_sdk_language = "c",
     .telemetry_sdk_version = "1.2.3",
     .telemetry_sdk_name = "example_ctx.c",
-    .resource_attributes = resource_attributes
+    .resource_attributes = resource_attributes,
+    .extra_attributes = extra_attributes
   };
 
   otel_process_ctx_result result = otel_process_ctx_publish(&data);

@@ -42,7 +42,8 @@ static const otel_process_ctx_data empty_data = {
   .telemetry_sdk_language = NULL,
   .telemetry_sdk_version = NULL,
   .telemetry_sdk_name = NULL,
-  .resource_attributes = NULL
+  .resource_attributes = NULL,
+  .extra_attributes = NULL
 };
 
 #if (defined(OTEL_PROCESS_CTX_NOOP) && OTEL_PROCESS_CTX_NOOP) || !defined(__linux__)
@@ -345,8 +346,8 @@ static void write_protobuf_tag(char **ptr, uint8_t field_number) {
   *(*ptr)++ = (char)((field_number << 3) | 2); // Field type is always 2 (LEN)
 }
 
-static void write_attribute(char **ptr, const char *key, const char *value) {
-  write_protobuf_tag(ptr, 1); // Resource.attributes (field 1)
+static void write_attribute(char **ptr, uint8_t field_number, const char *key, const char *value) {
+  write_protobuf_tag(ptr, field_number);
   write_protobuf_varint(ptr, protobuf_otel_keyvalue_string_size(key, value));
 
   // KeyValue
@@ -387,9 +388,14 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (!validation_result.success) return validation_result;
   }
 
+  size_t extra_attributes_pairs_size = 0;
+  if (data.extra_attributes != NULL) {
+    validation_result = validate_and_calculate_protobuf_payload_size(&extra_attributes_pairs_size, data.extra_attributes);
+    if (!validation_result.success) return validation_result;
+  }
+
   size_t resource_size = pairs_size + resource_attributes_pairs_size;
-  // ProcessContext wrapper: tag (1 byte) + resource length varint + resource content
-  size_t total_size = 1 + protobuf_varint_size(resource_size) + resource_size;
+  size_t total_size = protobuf_record_size(resource_size) + extra_attributes_pairs_size;
 
   char *encoded = (char *) calloc(total_size, 1);
   if (!encoded) {
@@ -402,11 +408,15 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
   write_protobuf_varint(&ptr, resource_size);
 
   for (size_t i = 0; pairs[i * 2] != NULL; i++) {
-    write_attribute(&ptr, pairs[i * 2], pairs[i * 2 + 1]);
+    write_attribute(&ptr, 1, pairs[i * 2], pairs[i * 2 + 1]);
   }
 
   for (size_t i = 0; data.resource_attributes != NULL && data.resource_attributes[i * 2] != NULL; i++) {
-    write_attribute(&ptr, data.resource_attributes[i * 2], data.resource_attributes[i * 2 + 1]);
+    write_attribute(&ptr, 1, data.resource_attributes[i * 2], data.resource_attributes[i * 2 + 1]);
+  }
+
+  for (size_t i = 0; data.extra_attributes != NULL && data.extra_attributes[i * 2] != NULL; i++) {
+    write_attribute(&ptr, 2, data.extra_attributes[i * 2], data.extra_attributes[i * 2 + 1]);
   }
 
   *out = encoded;
@@ -495,6 +505,34 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     return wire_type == 2; // We only need the LEN wire type for now
   }
 
+  // Reads an OTel KeyValue message (key string + AnyValue-wrapped string) into the provided buffers.
+  static bool read_protobuf_keyvalue(char **ptr, char *end_ptr, char *key_buffer, char *value_buffer) {
+    bool key_found = false;
+    bool value_found = false;
+
+    while (*ptr < end_ptr) {
+      uint8_t kv_field;
+      if (!read_protobuf_tag(ptr, end_ptr, &kv_field)) return false;
+
+      if (kv_field == 1) { // KeyValue.key
+        if (!read_protobuf_string(ptr, end_ptr, key_buffer)) return false;
+        key_found = true;
+      } else if (kv_field == 2) { // KeyValue.value (AnyValue)
+        uint16_t _any_len; // Unused, but we still need to consume + validate the varint
+        if (!read_protobuf_varint(ptr, end_ptr, &_any_len)) return false;
+        uint8_t any_field;
+        if (!read_protobuf_tag(ptr, end_ptr, &any_field)) return false;
+
+        if (any_field == 1) { // AnyValue.string_value
+          if (!read_protobuf_string(ptr, end_ptr, value_buffer)) return false;
+          value_found = true;
+        }
+      }
+    }
+
+    return key_found && value_found;
+  }
+
   // Simplified protobuf decoder to match the exact encoder above. If the protobuf data doesn't match the encoder, this will
   // return false.
   static bool otel_process_ctx_decode_payload(char *payload, uint32_t payload_size, otel_process_ctx_data *data_out, char *key_buffer, char *value_buffer) {
@@ -517,6 +555,11 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     data_out->resource_attributes = (const char **) calloc(resource_capacity, sizeof(char *));
     if (data_out->resource_attributes == NULL) return false;
 
+    size_t extra_attributes_index = 0;
+    size_t extra_attributes_capacity = 201; // Allocate space for 100 pairs + NULL terminator entry
+    data_out->extra_attributes = (const char **) calloc(extra_attributes_capacity, sizeof(char *));
+    if (data_out->extra_attributes == NULL) return false;
+
     while (ptr < resource_end) {
       uint8_t field_number;
       if (!read_protobuf_tag(&ptr, resource_end, &field_number) || field_number != 1) return false;
@@ -526,31 +569,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
       char *kv_end = ptr + kv_len;
       if (kv_end > resource_end) return false;
 
-      bool key_found = false;
-      bool value_found = false;
-
-      // Parse KeyValue
-      while (ptr < kv_end) {
-        uint8_t kv_field;
-        if (!read_protobuf_tag(&ptr, kv_end, &kv_field)) return false;
-
-        if (kv_field == 1) { // KeyValue.key
-          if (!read_protobuf_string(&ptr, kv_end, key_buffer)) return false;
-          key_found = true;
-        } else if (kv_field == 2) { // KeyValue.value (AnyValue)
-          uint16_t _any_len; // Unused, but we still need to consume + validate the varint
-          if (!read_protobuf_varint(&ptr, kv_end, &_any_len)) return false;
-          uint8_t any_field;
-          if (!read_protobuf_tag(&ptr, kv_end, &any_field)) return false;
-
-          if (any_field == 1) { // AnyValue.string_value
-            if (!read_protobuf_string(&ptr, kv_end, value_buffer)) return false;
-            value_found = true;
-          }
-        }
-      }
-
-      if (!key_found || !value_found) return false;
+      if (!read_protobuf_keyvalue(&ptr, kv_end, key_buffer, value_buffer)) return false;
 
       char *value = strdup(value_buffer);
       if (!value) return false;
@@ -577,6 +596,29 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
       }
     }
 
+    while (ptr < end_ptr) {
+      uint8_t extra_ctx_field;
+      if (!read_protobuf_tag(&ptr, end_ptr, &extra_ctx_field) || extra_ctx_field != 2) return false;
+
+      uint16_t kv_len;
+      if (!read_protobuf_varint(&ptr, end_ptr, &kv_len)) return false;
+      char *kv_end = ptr + kv_len;
+      if (kv_end > end_ptr) return false;
+
+      if (!read_protobuf_keyvalue(&ptr, kv_end, key_buffer, value_buffer)) return false;
+
+      char *key = strdup(key_buffer);
+      char *value = strdup(value_buffer);
+      if (!key || !value || extra_attributes_index + 2 >= extra_attributes_capacity) {
+        free(key);
+        free(value);
+        return false;
+      }
+      data_out->extra_attributes[extra_attributes_index] = key;
+      data_out->extra_attributes[extra_attributes_index + 1] = value;
+      extra_attributes_index += 2;
+    }
+
     // Validate all required fields were found
     return data_out->deployment_environment_name != NULL &&
            data_out->service_instance_id != NULL &&
@@ -598,6 +640,10 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (data.resource_attributes) {
       for (int i = 0; data.resource_attributes[i] != NULL; i++) free((void *)data.resource_attributes[i]);
       free((void *)data.resource_attributes);
+    }
+    if (data.extra_attributes) {
+      for (int i = 0; data.extra_attributes[i] != NULL; i++) free((void *)data.extra_attributes[i]);
+      free((void *)data.extra_attributes);
     }
   }
 
