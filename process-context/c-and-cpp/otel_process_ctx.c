@@ -43,7 +43,8 @@ static const otel_process_ctx_data empty_data = {
   .telemetry_sdk_version = NULL,
   .telemetry_sdk_name = NULL,
   .resource_attributes = NULL,
-  .extra_attributes = NULL
+  .extra_attributes = NULL,
+  .thread_ctx_config = NULL
 };
 
 #if (defined(OTEL_PROCESS_CTX_NOOP) && OTEL_PROCESS_CTX_NOOP) || !defined(__linux__)
@@ -305,6 +306,14 @@ static size_t protobuf_otel_keyvalue_string_size(const char *key, const char *va
   return key_field_size + value_field_size; // Does not include the keyvalue record tag + size, only its payload
 }
 
+static size_t protobuf_otel_array_value_content_size(const char **strings) {
+  size_t total = 0;
+  for (size_t i = 0; strings[i] != NULL; i++) {
+    total += protobuf_record_size(protobuf_string_size(strings[i])); // ArrayValue.values[i]: AnyValue{string_value}
+  }
+  return total;
+}
+
 // As a simplification, we enforce that keys and values are <= 4096 (KEY_VALUE_LIMIT) so that their size + extra bytes always fits within UINT14_MAX
 static otel_process_ctx_result validate_and_calculate_protobuf_payload_size(size_t *out_pairs_size, const char **pairs) {
   size_t num_entries = 0;
@@ -370,6 +379,31 @@ static void write_attribute(char **ptr, uint8_t field_number, const char *key, c
   write_protobuf_string(ptr, value);
 }
 
+static void write_array_attribute(char **ptr, uint8_t field_number, const char *key, const char **strings) {
+  size_t array_value_content_size = protobuf_otel_array_value_content_size(strings);
+  size_t any_value_content_size = protobuf_record_size(array_value_content_size);
+  size_t kv_content_size = protobuf_string_size(key) + protobuf_record_size(any_value_content_size);
+
+  write_protobuf_tag(ptr, field_number);
+  write_protobuf_varint(ptr, kv_content_size);
+
+  write_protobuf_tag(ptr, 1); // KeyValue.key (field 1)
+  write_protobuf_string(ptr, key);
+
+  write_protobuf_tag(ptr, 2); // KeyValue.value (field 2) = AnyValue message
+  write_protobuf_varint(ptr, any_value_content_size);
+
+  write_protobuf_tag(ptr, 5); // AnyValue.array_value (field 5) = ArrayValue message
+  write_protobuf_varint(ptr, array_value_content_size);
+
+  for (size_t i = 0; strings[i] != NULL; i++) { // ArrayValue.values (field 1) - repeated AnyValue entries
+    write_protobuf_tag(ptr, 1); // ArrayValue.values[i]
+    write_protobuf_varint(ptr, protobuf_string_size(strings[i])); // Inner AnyValue size
+    write_protobuf_tag(ptr, 1); // AnyValue.string_value (field 1)
+    write_protobuf_string(ptr, strings[i]);
+  }
+}
+
 // Encode the payload as protobuf bytes.
 //
 // This method implements an extremely compact but limited protobuf encoder for the ProcessContext message.
@@ -403,8 +437,31 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (!validation_result.success) return validation_result;
   }
 
+  size_t thread_ctx_pairs_size = 0;
+  if (data.thread_ctx_config != NULL) {
+    if (data.thread_ctx_config->schema_version != NULL) {
+      const char *thread_ctx_pairs[] = {"threadlocal.schema_version", data.thread_ctx_config->schema_version, NULL};
+      validation_result = validate_and_calculate_protobuf_payload_size(&thread_ctx_pairs_size, thread_ctx_pairs);
+      if (!validation_result.success) return validation_result;
+    }
+    if (data.thread_ctx_config->attribute_key_map != NULL) {
+      if (data.thread_ctx_config->schema_version == NULL) {
+        return (otel_process_ctx_result) {.success = false, .error_message = "attribute_key_map requires schema_version to be set (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+      }
+      for (size_t i = 0; data.thread_ctx_config->attribute_key_map[i] != NULL; i++) {
+        if (strlen(data.thread_ctx_config->attribute_key_map[i]) > KEY_VALUE_LIMIT) {
+          return (otel_process_ctx_result) {.success = false, .error_message = "Length of attribute_key_map entry exceeds 4096 limit (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+        }
+      }
+      size_t array_value_content_size = protobuf_otel_array_value_content_size(data.thread_ctx_config->attribute_key_map);
+      size_t any_value_content_size = protobuf_record_size(array_value_content_size);
+      size_t kv_content_size = protobuf_string_size("threadlocal.attribute_key_map") + protobuf_record_size(any_value_content_size);
+      thread_ctx_pairs_size += protobuf_record_size(kv_content_size);
+    }
+  }
+
   size_t resource_size = pairs_size + resource_attributes_pairs_size;
-  size_t total_size = protobuf_record_size(resource_size) + extra_attributes_pairs_size;
+  size_t total_size = protobuf_record_size(resource_size) + extra_attributes_pairs_size + thread_ctx_pairs_size;
 
   char *encoded = (char *) calloc(total_size, 1);
   if (!encoded) {
@@ -424,8 +481,18 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     write_attribute(&ptr, 1, data.resource_attributes[i * 2], data.resource_attributes[i * 2 + 1]);
   }
 
+  // ProcessContext.extra_attributes (field 2)
   for (size_t i = 0; data.extra_attributes != NULL && data.extra_attributes[i * 2] != NULL; i++) {
     write_attribute(&ptr, 2, data.extra_attributes[i * 2], data.extra_attributes[i * 2 + 1]);
+  }
+
+  if (data.thread_ctx_config != NULL) {
+    if (data.thread_ctx_config->schema_version != NULL) {
+      write_attribute(&ptr, 2, "threadlocal.schema_version", data.thread_ctx_config->schema_version);
+    }
+    if (data.thread_ctx_config->attribute_key_map != NULL) {
+      write_array_attribute(&ptr, 2, "threadlocal.attribute_key_map", data.thread_ctx_config->attribute_key_map);
+    }
   }
 
   *out = encoded;
@@ -514,6 +581,15 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     return wire_type == 2; // We only need the LEN wire type for now
   }
 
+  // Peeks at the key of an OTel KeyValue message without advancing the pointer.
+  static bool peek_protobuf_key(char *ptr, char *end_ptr, char *key_buffer) {
+    char *p = ptr;
+    uint8_t kv_field;
+    if (!read_protobuf_tag(&p, end_ptr, &kv_field)) return false;
+    if (kv_field != 1) return false; // KeyValue.key is field 1
+    return read_protobuf_string(&p, end_ptr, key_buffer);
+  }
+
   // Reads an OTel KeyValue message (key string + AnyValue-wrapped string) into the provided buffers.
   static bool read_protobuf_keyvalue(char **ptr, char *end_ptr, char *key_buffer, char *value_buffer) {
     bool key_found = false;
@@ -540,6 +616,46 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     }
 
     return key_found && value_found;
+  }
+
+  // Reads an AnyValue.array_value (field 5) from ptr; ptr must be at KeyValue.value (tag 2).
+  // Allocates a NULL-terminated array of strings and sets *out_array immediately. On error the caller must free it.
+  static bool read_protobuf_array_value_strings(char **ptr, char *end_ptr, char *value_buffer, const char ***out_array) {
+    uint8_t field;
+    if (!read_protobuf_tag(ptr, end_ptr, &field) || field != 2) return false;
+    uint16_t any_len;
+    if (!read_protobuf_varint(ptr, end_ptr, &any_len)) return false;
+    char *any_end = *ptr + any_len;
+    if (any_end > end_ptr) return false;
+
+    if (!read_protobuf_tag(ptr, any_end, &field) || field != 5) return false;
+    uint16_t array_len;
+    if (!read_protobuf_varint(ptr, any_end, &array_len)) return false;
+    char *array_end = *ptr + array_len;
+    if (array_end > any_end) return false;
+
+    size_t max = 100;
+    size_t capacity = max + 1;
+    const char **arr = (const char **) calloc(capacity, sizeof(char *));
+    if (!arr) return false;
+    *out_array = arr;
+    size_t count = 0;
+
+    while (*ptr < array_end) {
+      if (count >= max) return false;
+      if (!read_protobuf_tag(ptr, array_end, &field) || field != 1) return false;
+      uint16_t item_len;
+      if (!read_protobuf_varint(ptr, array_end, &item_len)) return false;
+      char *item_end = *ptr + item_len;
+      if (item_end > array_end) return false;
+      if (!read_protobuf_tag(ptr, item_end, &field) || field != 1) return false;
+      if (!read_protobuf_string(ptr, item_end, value_buffer)) return false;
+      char *dup = strdup(value_buffer);
+      if (!dup) return false;
+      arr[count++] = dup;
+    }
+
+    return true;
   }
 
   // Simplified protobuf decoder to match the exact encoder above. If the protobuf data doesn't match the encoder, this will
@@ -569,6 +685,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     data_out->extra_attributes = (const char **) calloc(extra_attributes_capacity, sizeof(char *));
     if (data_out->extra_attributes == NULL) return false;
 
+    // Parse resource attributes (field 1)
     while (ptr < resource_end) {
       uint8_t field_number;
       if (!read_protobuf_tag(&ptr, resource_end, &field_number) || field_number != 1) return false;
@@ -605,6 +722,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
       }
     }
 
+    // Parse extra attributes (field 2)
     while (ptr < end_ptr) {
       uint8_t extra_ctx_field;
       if (!read_protobuf_tag(&ptr, end_ptr, &extra_ctx_field) || extra_ctx_field != 2) return false;
@@ -614,18 +732,43 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
       char *kv_end = ptr + kv_len;
       if (kv_end > end_ptr) return false;
 
-      if (!read_protobuf_keyvalue(&ptr, kv_end, key_buffer, value_buffer)) return false;
+      if (!peek_protobuf_key(ptr, kv_end, key_buffer)) return false;
 
-      char *key = strdup(key_buffer);
-      char *value = strdup(value_buffer);
-      if (!key || !value || extra_attributes_index + 2 >= extra_attributes_capacity) {
-        free(key);
-        free(value);
-        return false;
+      if (strcmp(key_buffer, "threadlocal.attribute_key_map") == 0) {
+        // Consume key to advance ptr
+        uint8_t kv_field;
+        if (!read_protobuf_tag(&ptr, kv_end, &kv_field) || kv_field != 1) return false;
+        if (!read_protobuf_string(&ptr, kv_end, key_buffer)) return false;
+        if (!data_out->thread_ctx_config) {
+          otel_thread_ctx_config_data *setup = (otel_thread_ctx_config_data *) calloc(1, sizeof(otel_thread_ctx_config_data));
+          if (!setup) return false;
+          data_out->thread_ctx_config = setup;
+        }
+        if (!read_protobuf_array_value_strings(&ptr, kv_end, value_buffer, &((otel_thread_ctx_config_data *)data_out->thread_ctx_config)->attribute_key_map)) return false;
+      } else {
+        if (!read_protobuf_keyvalue(&ptr, kv_end, key_buffer, value_buffer)) return false;
+
+        char *value = strdup(value_buffer);
+        if (!value) return false;
+
+        // Dispatch based on key
+        if (strcmp(key_buffer, "threadlocal.schema_version") == 0) {
+          otel_thread_ctx_config_data *setup = (otel_thread_ctx_config_data *) calloc(1, sizeof(otel_thread_ctx_config_data));
+          if (!setup) { free(value); return false; }
+          setup->schema_version = value;
+          data_out->thread_ctx_config = setup;
+        } else {
+          char *key = strdup(key_buffer);
+          if (!key || extra_attributes_index + 2 >= extra_attributes_capacity) {
+            free(key);
+            free(value);
+            return false;
+          }
+          data_out->extra_attributes[extra_attributes_index] = key;
+          data_out->extra_attributes[extra_attributes_index + 1] = value;
+          extra_attributes_index += 2;
+        }
       }
-      data_out->extra_attributes[extra_attributes_index] = key;
-      data_out->extra_attributes[extra_attributes_index + 1] = value;
-      extra_attributes_index += 2;
     }
 
     // Validate all required fields were found
@@ -653,6 +796,16 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (data.extra_attributes) {
       for (int i = 0; data.extra_attributes[i] != NULL; i++) free((void *)data.extra_attributes[i]);
       free((void *)data.extra_attributes);
+    }
+    if (data.thread_ctx_config) {
+      if (data.thread_ctx_config->schema_version) free((void *)data.thread_ctx_config->schema_version);
+      if (data.thread_ctx_config->attribute_key_map) {
+        for (int i = 0; data.thread_ctx_config->attribute_key_map[i] != NULL; i++) {
+          free((void *)data.thread_ctx_config->attribute_key_map[i]);
+        }
+        free((void *)data.thread_ctx_config->attribute_key_map);
+      }
+      free((void *)data.thread_ctx_config);
     }
   }
 
