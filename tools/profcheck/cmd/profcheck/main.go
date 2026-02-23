@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/open-telemetry/sig-profiling/tools/profcheck"
+
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
 )
@@ -50,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (ConformanceChecker{CheckDictionaryDuplicates: *checkDupes, CheckSampleTimestampShape: *checkSampleShapes}).Check(&data); err != nil {
+	if err := (profcheck.ConformanceChecker{CheckDictionaryDuplicates: *checkDupes, CheckSampleTimestampShape: *checkSampleShapes}).Check(&data); err != nil {
 		fmt.Printf("%s: conformance checks failed: %v\n", inputPath, err)
 	}
 	fmt.Printf("%s: conformance checks passed\n", inputPath)
