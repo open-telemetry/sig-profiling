@@ -145,6 +145,10 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   const ssize_t mapping_size = sizeof(otel_process_ctx_mapping);
   published_state.publisher_pid = getpid(); // This allows us to detect in forks that we shouldn't touch the mapping
   int fd = memfd_create("OTEL_CTX", MFD_CLOEXEC | MFD_ALLOW_SEALING | MFD_NOEXEC_SEAL);
+  if (fd < 0) {
+    // MFD_NOEXEC_SEAL is a newer flag; older kernels reject unknown flags, so let's retry without it
+    fd = memfd_create("OTEL_CTX", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  }
   bool failed_to_close_fd = false;
   if (fd >= 0) {
     // Try to create mapping from memfd
