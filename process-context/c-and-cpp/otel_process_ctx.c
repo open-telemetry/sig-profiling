@@ -247,6 +247,11 @@ static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns,
     return (otel_process_ctx_result) {.success = false, .error_message = "Unexpected: otel_process_ctx_data is NULL or context is not published (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   }
 
+  if (published_at_ns == published_state.mapping->otel_process_ctx_published_at_ns) {
+    // Advance published_at_ns to allow readers to detect the update
+    published_at_ns++;
+  }
+
   // Step: Prepare the new payload to be published
   // The payload SHOULD be ready and valid before trying to actually update the mapping.
   uint32_t payload_size = 0;
