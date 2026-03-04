@@ -76,10 +76,10 @@ static const otel_process_ctx_data empty_data = {
  * An outside-of-process reader will read this struct + otel_process_payload to get the data.
  */
 typedef struct __attribute__((packed, aligned(8))) {
-  char otel_process_ctx_signature[8];        // Always OTEL_CTX_SIGNATURE
+  char otel_process_ctx_signature[8];        // Always "OTEL_CTX"
   uint32_t otel_process_ctx_version;         // Always > 0, incremented when the data structure changes, currently v2
   uint32_t otel_process_payload_size;        // Always > 0, size of storage
-  uint64_t otel_process_ctx_published_at_ns; // Always > 0, timestamp from when the context was published in nanoseconds since epoch
+  uint64_t otel_process_ctx_published_at_ns; // Timestamp from when the context was published in nanoseconds since epoch. 0 during updates.
   char *otel_process_payload;                // Always non-null, points to the storage for the data; expected to be a protobuf map of string key/value pairs, null-terminated
 } otel_process_ctx_mapping;
 
@@ -183,24 +183,24 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   }
 
   // Step: Populate the mapping
-  // The payload and any extra fields must come first and not be reordered with the signature by the compiler.
+  // The payload and any extra fields must come first and not be reordered with the published_at_ns by the compiler.
   *published_state.mapping = (otel_process_ctx_mapping) {
-    .otel_process_ctx_signature = {0}, // Set in "Step: Populate the signature into the mapping" below
+    .otel_process_ctx_signature = { 'O', 'T', 'E', 'L', '_', 'C', 'T', 'X' },
     .otel_process_ctx_version = 2,
     .otel_process_payload_size = payload_size,
-    .otel_process_ctx_published_at_ns = published_at_ns,
+    .otel_process_ctx_published_at_ns = 0, // Set in "Step: Populate the published_at_ns into the mapping" below
     .otel_process_payload = published_state.payload
   };
 
-  // Step: Synchronization - Mapping has been filled and is missing signature
-  // Make sure the initialization of the mapping + payload above does not get reordered with setting the signature below. Setting
-  // the signature is what tells an outside reader that the context is fully published.
+  // Step: Synchronization - Mapping has been filled and is missing published_at_ns
+  // Make sure the initialization of the mapping + payload above does not get reordered with setting the published_at_ns below. Setting
+  // the published_at_ns is what tells an outside reader that the context is fully published.
   atomic_thread_fence(memory_order_seq_cst);
 
-  // Step: Populate the signature into the mapping
-  // The signature must come last and not be reordered with the fields above by the compiler. After this step, external readers
-  // can read the signature and know that the payload is ready to be read.
-  memcpy(published_state.mapping->otel_process_ctx_signature, OTEL_CTX_SIGNATURE, sizeof(published_state.mapping->otel_process_ctx_signature));
+  // Step: Populate the published_at_ns into the mapping
+  // The published_at_ns must come last and not be reordered with the fields above by the compiler. After this step, external readers
+  // can read the published_at_ns and know that the payload is ready to be read.
+  published_state.mapping->otel_process_ctx_published_at_ns = published_at_ns;
 
   // Step: Attempt to name the mapping so outside readers can:
   // * Find it by name
