@@ -39,6 +39,18 @@ void burn_cpu_for(int seconds) {
   getchar();
 }
 
+static void print_key_value_pairs(const char *label, const char **pairs) {
+  if (pairs && pairs[0] != NULL) {
+    printf(", %s=", label);
+    for (int i = 0; pairs[i] != NULL; i += 2) {
+      if (i > 0) printf(",");
+      printf("%s:%s", pairs[i], pairs[i + 1]);
+    }
+  } else {
+    printf(", %s=(none)", label);
+  }
+}
+
 bool read_and_print_ctx(const char* prefix) {
   otel_process_ctx_read_result result = otel_process_ctx_read();
 
@@ -60,14 +72,18 @@ bool read_and_print_ctx(const char* prefix) {
     result.data.telemetry_sdk_version
   );
 
-  if (result.data.resources && result.data.resources[0] != NULL) {
-    printf(", resources=");
-    for (int i = 0; result.data.resources[i] != NULL; i += 2) {
-      if (i > 0) printf(",");
-      printf("%s=%s", result.data.resources[i], result.data.resources[i + 1]);
+  print_key_value_pairs("resource_attributes", result.data.resource_attributes);
+  print_key_value_pairs("extra_attributes", result.data.extra_attributes);
+  if (result.data.thread_ctx_config) {
+    printf(", thread_ctx_config.schema_version=%s", result.data.thread_ctx_config->schema_version);
+    const char **map = result.data.thread_ctx_config->attribute_key_map;
+    if (map && map[0] != NULL) {
+      printf(", thread_ctx_config.attribute_key_map=");
+      for (int i = 0; map[i] != NULL; i++) {
+        if (i > 0) printf(",");
+        printf("%s", map[i]);
+      }
     }
-  } else {
-    printf(", resources=(none)");
   }
   printf("\n");
 
@@ -75,9 +91,14 @@ bool read_and_print_ctx(const char* prefix) {
   return true;
 }
 
-const char *resources[] = {
+const char *resource_attributes[] = {
   "resource.key1", "resource.value1",
   "resource.key2", "resource.value2",
+  NULL
+};
+
+const char *extra_attributes[] = {
+  "example_extra_attribute_foo", "example_extra_attribute_foo_value",
   NULL
 };
 
@@ -94,7 +115,7 @@ int update_and_fork(void) {
     .telemetry_sdk_language = "c",
     .telemetry_sdk_version = "1.2.3",
     .telemetry_sdk_name = "example_ctx.c",
-    .resources = resources
+    .resource_attributes = resource_attributes,
   };
 
   otel_process_ctx_result result = otel_process_ctx_publish(&update_data);
@@ -119,7 +140,7 @@ int update_and_fork(void) {
       .telemetry_sdk_language = "c",
       .telemetry_sdk_version = "1.2.3",
       .telemetry_sdk_name = "example_ctx.c",
-      .resources = NULL
+      .resource_attributes = NULL
     };
 
     result = otel_process_ctx_publish(&child_data);
@@ -164,6 +185,12 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  const char *attribute_key_map[] = {"http_route", "http_method", "user_id", NULL};
+  otel_thread_ctx_config_data thread_ctx_config = {
+    .schema_version = "tlsdesc_v1_dev",
+    .attribute_key_map = attribute_key_map,
+  };
+
   otel_process_ctx_data data = {
     .deployment_environment_name = "prod",
     .service_instance_id = "123d8444-2c7e-46e3-89f6-6217880f7123",
@@ -172,7 +199,9 @@ int main(int argc, char* argv[]) {
     .telemetry_sdk_language = "c",
     .telemetry_sdk_version = "1.2.3",
     .telemetry_sdk_name = "example_ctx.c",
-    .resources = resources
+    .resource_attributes = resource_attributes,
+    .extra_attributes = extra_attributes,
+    .thread_ctx_config = &thread_ctx_config,
   };
 
   otel_process_ctx_result result = otel_process_ctx_publish(&data);
