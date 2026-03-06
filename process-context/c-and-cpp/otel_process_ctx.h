@@ -54,10 +54,14 @@ typedef struct {
   const char *telemetry_sdk_version;
   // https://opentelemetry.io/docs/specs/semconv/registry/attributes/telemetry/#telemetry-sdk-name
   const char *telemetry_sdk_name;
-  // Additional key/value pairs as resources https://opentelemetry.io/docs/specs/otel/resource/sdk/
-  // Can be NULL if no resources are needed; if non-NULL, this array MUST be terminated with a NULL entry.
+  // Additional key/value pairs as resource attributes https://opentelemetry.io/docs/specs/otel/resource/sdk/
+  // Can be NULL if no resource attributes are needed; if non-NULL, this array MUST be terminated with a NULL entry.
   // Every even entry is a key, every odd entry is a value (E.g. "key1", "value1", "key2", "value2", NULL).
-  const char **resources;
+  const char **resource_attributes;
+  // Additional key/value pairs as extra attributes (ProcessContext.extra_attributes in process_context.proto)
+  // Can be NULL if no extra attributes are needed; if non-NULL, this array MUST be terminated with a NULL entry.
+  // Every even entry is a key, every odd entry is a value (E.g. "key1", "value1", "key2", "value2", NULL).
+  const char **extra_attributes;
 } otel_process_ctx_data;
 
 /** Number of entries in the `otel_process_ctx_data` struct. Can be used to easily detect when the struct is updated. */
