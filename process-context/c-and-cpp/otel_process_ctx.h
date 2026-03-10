@@ -25,6 +25,18 @@ extern "C" {
  * On non-Linux OS's (or when OTEL_PROCESS_CTX_NOOP is defined) no-op versions of functions are supplied.
  */
 
+ /**
+ * Config for the experimental thread context sharing mechanism, see
+ * https://docs.google.com/document/d/1eatbHpEXXhWZEPrXZpfR58-5RIx-81mUgF69Zpn3Rz4/edit?tab=t.bmgoq3yor67o for usage
+ * details.
+ */
+typedef struct {
+  const char *schema_version;
+  // NULL-terminated array of attribute key strings to be used in thread context.
+  // Can be NULL if not needed.
+  const char **attribute_key_map;
+} otel_thread_ctx_config_data;
+
 /**
  * Data that can be published as a process context.
  *
@@ -62,6 +74,8 @@ typedef struct {
   // Can be NULL if no extra attributes are needed; if non-NULL, this array MUST be terminated with a NULL entry.
   // Every even entry is a key, every odd entry is a value (E.g. "key1", "value1", "key2", "value2", NULL).
   const char **extra_attributes;
+  // Experimental thread context sharing mechanism configuration. See struct definition for details. Can be NULL.
+  const otel_thread_ctx_config_data *thread_ctx_config;
 } otel_process_ctx_data;
 
 /** Number of entries in the `otel_process_ctx_data` struct. Can be used to easily detect when the struct is updated. */
