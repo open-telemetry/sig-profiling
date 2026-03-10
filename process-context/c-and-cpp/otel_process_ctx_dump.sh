@@ -27,7 +27,7 @@ if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
 fi
 
 # Find the mapping by name
-if ! line="$(grep -F -m 1 -e '[anon_shmem:OTEL_CTX]' -e '/memfd:OTEL_CTX' "/proc/$pid/maps")"; then
+if ! line="$(grep -F -m 1 -e '[anon_shmem:OTEL_CTX]' -e '/memfd:OTEL_CTX' -e '[anon:OTEL_CTX]' "/proc/$pid/maps")"; then
   echo "No OTEL_CTX context found." >&2
   exit 1
 fi

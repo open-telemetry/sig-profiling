@@ -42,7 +42,8 @@ static const otel_process_ctx_data empty_data = {
   .telemetry_sdk_language = NULL,
   .telemetry_sdk_version = NULL,
   .telemetry_sdk_name = NULL,
-  .resources = NULL
+  .resource_attributes = NULL,
+  .extra_attributes = NULL
 };
 
 #if (defined(OTEL_PROCESS_CTX_NOOP) && OTEL_PROCESS_CTX_NOOP) || !defined(__linux__)
@@ -75,10 +76,10 @@ static const otel_process_ctx_data empty_data = {
  * An outside-of-process reader will read this struct + otel_process_payload to get the data.
  */
 typedef struct __attribute__((packed, aligned(8))) {
-  char otel_process_ctx_signature[8];        // Always OTEL_CTX_SIGNATURE
+  char otel_process_ctx_signature[8];        // Always "OTEL_CTX"
   uint32_t otel_process_ctx_version;         // Always > 0, incremented when the data structure changes, currently v2
   uint32_t otel_process_payload_size;        // Always > 0, size of storage
-  uint64_t otel_process_ctx_published_at_ns; // Always > 0, timestamp from when the context was published in nanoseconds since epoch
+  uint64_t otel_process_ctx_published_at_ns; // Timestamp from when the context was published in nanoseconds since epoch. 0 during updates.
   char *otel_process_payload;                // Always non-null, points to the storage for the data; expected to be a protobuf map of string key/value pairs, null-terminated
 } otel_process_ctx_mapping;
 
@@ -144,6 +145,10 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   const ssize_t mapping_size = sizeof(otel_process_ctx_mapping);
   published_state.publisher_pid = getpid(); // This allows us to detect in forks that we shouldn't touch the mapping
   int fd = memfd_create("OTEL_CTX", MFD_CLOEXEC | MFD_ALLOW_SEALING | MFD_NOEXEC_SEAL);
+  if (fd < 0) {
+    // MFD_NOEXEC_SEAL is a newer flag; older kernels reject unknown flags, so let's retry without it
+    fd = memfd_create("OTEL_CTX", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+  }
   bool failed_to_close_fd = false;
   if (fd >= 0) {
     // Try to create mapping from memfd
@@ -178,24 +183,24 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   }
 
   // Step: Populate the mapping
-  // The payload and any extra fields must come first and not be reordered with the signature by the compiler.
+  // The payload and any extra fields must come first and not be reordered with the published_at_ns by the compiler.
   *published_state.mapping = (otel_process_ctx_mapping) {
-    .otel_process_ctx_signature = {0}, // Set in "Step: Populate the signature into the mapping" below
+    .otel_process_ctx_signature = { 'O', 'T', 'E', 'L', '_', 'C', 'T', 'X' },
     .otel_process_ctx_version = 2,
     .otel_process_payload_size = payload_size,
-    .otel_process_ctx_published_at_ns = published_at_ns,
+    .otel_process_ctx_published_at_ns = 0, // Set in "Step: Populate the published_at_ns into the mapping" below
     .otel_process_payload = published_state.payload
   };
 
-  // Step: Synchronization - Mapping has been filled and is missing signature
-  // Make sure the initialization of the mapping + payload above does not get reordered with setting the signature below. Setting
-  // the signature is what tells an outside reader that the context is fully published.
+  // Step: Synchronization - Mapping has been filled and is missing published_at_ns
+  // Make sure the initialization of the mapping + payload above does not get reordered with setting the published_at_ns below. Setting
+  // the published_at_ns is what tells an outside reader that the context is fully published.
   atomic_thread_fence(memory_order_seq_cst);
 
-  // Step: Populate the signature into the mapping
-  // The signature must come last and not be reordered with the fields above by the compiler. After this step, external readers
-  // can read the signature and know that the payload is ready to be read.
-  memcpy(published_state.mapping->otel_process_ctx_signature, OTEL_CTX_SIGNATURE, sizeof(published_state.mapping->otel_process_ctx_signature));
+  // Step: Populate the published_at_ns into the mapping
+  // The published_at_ns must come last and not be reordered with the fields above by the compiler. After this step, external readers
+  // can read the published_at_ns and know that the payload is ready to be read.
+  published_state.mapping->otel_process_ctx_published_at_ns = published_at_ns;
 
   // Step: Attempt to name the mapping so outside readers can:
   // * Find it by name
@@ -240,6 +245,11 @@ bool otel_process_ctx_drop_current(void) {
 static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns, const otel_process_ctx_data *data) {
   if (data == NULL || !ctx_is_published(published_state)) {
     return (otel_process_ctx_result) {.success = false, .error_message = "Unexpected: otel_process_ctx_data is NULL or context is not published (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+  }
+
+  if (published_at_ns == published_state.mapping->otel_process_ctx_published_at_ns) {
+    // Advance published_at_ns to allow readers to detect the update
+    published_at_ns++;
   }
 
   // Step: Prepare the new payload to be published
@@ -345,8 +355,8 @@ static void write_protobuf_tag(char **ptr, uint8_t field_number) {
   *(*ptr)++ = (char)((field_number << 3) | 2); // Field type is always 2 (LEN)
 }
 
-static void write_attribute(char **ptr, const char *key, const char *value) {
-  write_protobuf_tag(ptr, 1); // Resource.attributes (field 1)
+static void write_attribute(char **ptr, uint8_t field_number, const char *key, const char *value) {
+  write_protobuf_tag(ptr, field_number);
   write_protobuf_varint(ptr, protobuf_otel_keyvalue_string_size(key, value));
 
   // KeyValue
@@ -381,15 +391,20 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
   otel_process_ctx_result validation_result = validate_and_calculate_protobuf_payload_size(&pairs_size, (const char **) pairs);
   if (!validation_result.success) return validation_result;
 
-  size_t resources_pairs_size = 0;
-  if (data.resources != NULL) {
-    validation_result = validate_and_calculate_protobuf_payload_size(&resources_pairs_size, data.resources);
+  size_t resource_attributes_pairs_size = 0;
+  if (data.resource_attributes != NULL) {
+    validation_result = validate_and_calculate_protobuf_payload_size(&resource_attributes_pairs_size, data.resource_attributes);
     if (!validation_result.success) return validation_result;
   }
 
-  size_t resource_size = pairs_size + resources_pairs_size;
-  // ProcessContext wrapper: tag (1 byte) + resource length varint + resource content
-  size_t total_size = 1 + protobuf_varint_size(resource_size) + resource_size;
+  size_t extra_attributes_pairs_size = 0;
+  if (data.extra_attributes != NULL) {
+    validation_result = validate_and_calculate_protobuf_payload_size(&extra_attributes_pairs_size, data.extra_attributes);
+    if (!validation_result.success) return validation_result;
+  }
+
+  size_t resource_size = pairs_size + resource_attributes_pairs_size;
+  size_t total_size = protobuf_record_size(resource_size) + extra_attributes_pairs_size;
 
   char *encoded = (char *) calloc(total_size, 1);
   if (!encoded) {
@@ -402,11 +417,15 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
   write_protobuf_varint(&ptr, resource_size);
 
   for (size_t i = 0; pairs[i * 2] != NULL; i++) {
-    write_attribute(&ptr, pairs[i * 2], pairs[i * 2 + 1]);
+    write_attribute(&ptr, 1, pairs[i * 2], pairs[i * 2 + 1]);
   }
 
-  for (size_t i = 0; data.resources != NULL && data.resources[i * 2] != NULL; i++) {
-    write_attribute(&ptr, data.resources[i * 2], data.resources[i * 2 + 1]);
+  for (size_t i = 0; data.resource_attributes != NULL && data.resource_attributes[i * 2] != NULL; i++) {
+    write_attribute(&ptr, 1, data.resource_attributes[i * 2], data.resource_attributes[i * 2 + 1]);
+  }
+
+  for (size_t i = 0; data.extra_attributes != NULL && data.extra_attributes[i * 2] != NULL; i++) {
+    write_attribute(&ptr, 2, data.extra_attributes[i * 2], data.extra_attributes[i * 2 + 1]);
   }
 
   *out = encoded;
@@ -439,7 +458,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (!fp) return result;
 
     while (fgets(line, sizeof(line), fp)) {
-      bool is_process_ctx = strstr(line, "[anon_shmem:OTEL_CTX]") != NULL || strstr(line, "/memfd:OTEL_CTX") != NULL;
+      bool is_process_ctx = strstr(line, "[anon_shmem:OTEL_CTX]") != NULL || strstr(line, "[anon:OTEL_CTX]") != NULL || strstr(line, "/memfd:OTEL_CTX") != NULL;
       if (is_process_ctx) {
         result = (otel_process_ctx_mapping *)parse_mapping_start(line);
         break;
@@ -495,6 +514,34 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     return wire_type == 2; // We only need the LEN wire type for now
   }
 
+  // Reads an OTel KeyValue message (key string + AnyValue-wrapped string) into the provided buffers.
+  static bool read_protobuf_keyvalue(char **ptr, char *end_ptr, char *key_buffer, char *value_buffer) {
+    bool key_found = false;
+    bool value_found = false;
+
+    while (*ptr < end_ptr) {
+      uint8_t kv_field;
+      if (!read_protobuf_tag(ptr, end_ptr, &kv_field)) return false;
+
+      if (kv_field == 1) { // KeyValue.key
+        if (!read_protobuf_string(ptr, end_ptr, key_buffer)) return false;
+        key_found = true;
+      } else if (kv_field == 2) { // KeyValue.value (AnyValue)
+        uint16_t _any_len; // Unused, but we still need to consume + validate the varint
+        if (!read_protobuf_varint(ptr, end_ptr, &_any_len)) return false;
+        uint8_t any_field;
+        if (!read_protobuf_tag(ptr, end_ptr, &any_field)) return false;
+
+        if (any_field == 1) { // AnyValue.string_value
+          if (!read_protobuf_string(ptr, end_ptr, value_buffer)) return false;
+          value_found = true;
+        }
+      }
+    }
+
+    return key_found && value_found;
+  }
+
   // Simplified protobuf decoder to match the exact encoder above. If the protobuf data doesn't match the encoder, this will
   // return false.
   static bool otel_process_ctx_decode_payload(char *payload, uint32_t payload_size, otel_process_ctx_data *data_out, char *key_buffer, char *value_buffer) {
@@ -514,8 +561,13 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
 
     size_t resource_index = 0;
     size_t resource_capacity = 201; // Allocate space for 100 pairs + NULL terminator entry
-    data_out->resources = (const char **) calloc(resource_capacity, sizeof(char *));
-    if (data_out->resources == NULL) return false;
+    data_out->resource_attributes = (const char **) calloc(resource_capacity, sizeof(char *));
+    if (data_out->resource_attributes == NULL) return false;
+
+    size_t extra_attributes_index = 0;
+    size_t extra_attributes_capacity = 201; // Allocate space for 100 pairs + NULL terminator entry
+    data_out->extra_attributes = (const char **) calloc(extra_attributes_capacity, sizeof(char *));
+    if (data_out->extra_attributes == NULL) return false;
 
     while (ptr < resource_end) {
       uint8_t field_number;
@@ -526,31 +578,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
       char *kv_end = ptr + kv_len;
       if (kv_end > resource_end) return false;
 
-      bool key_found = false;
-      bool value_found = false;
-
-      // Parse KeyValue
-      while (ptr < kv_end) {
-        uint8_t kv_field;
-        if (!read_protobuf_tag(&ptr, kv_end, &kv_field)) return false;
-
-        if (kv_field == 1) { // KeyValue.key
-          if (!read_protobuf_string(&ptr, kv_end, key_buffer)) return false;
-          key_found = true;
-        } else if (kv_field == 2) { // KeyValue.value (AnyValue)
-          uint16_t _any_len; // Unused, but we still need to consume + validate the varint
-          if (!read_protobuf_varint(&ptr, kv_end, &_any_len)) return false;
-          uint8_t any_field;
-          if (!read_protobuf_tag(&ptr, kv_end, &any_field)) return false;
-
-          if (any_field == 1) { // AnyValue.string_value
-            if (!read_protobuf_string(&ptr, kv_end, value_buffer)) return false;
-            value_found = true;
-          }
-        }
-      }
-
-      if (!key_found || !value_found) return false;
+      if (!read_protobuf_keyvalue(&ptr, kv_end, key_buffer, value_buffer)) return false;
 
       char *value = strdup(value_buffer);
       if (!value) return false;
@@ -571,10 +599,33 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
           free(value);
           return false;
         }
-        data_out->resources[resource_index] = key;
-        data_out->resources[resource_index + 1] = value;
+        data_out->resource_attributes[resource_index] = key;
+        data_out->resource_attributes[resource_index + 1] = value;
         resource_index += 2;
       }
+    }
+
+    while (ptr < end_ptr) {
+      uint8_t extra_ctx_field;
+      if (!read_protobuf_tag(&ptr, end_ptr, &extra_ctx_field) || extra_ctx_field != 2) return false;
+
+      uint16_t kv_len;
+      if (!read_protobuf_varint(&ptr, end_ptr, &kv_len)) return false;
+      char *kv_end = ptr + kv_len;
+      if (kv_end > end_ptr) return false;
+
+      if (!read_protobuf_keyvalue(&ptr, kv_end, key_buffer, value_buffer)) return false;
+
+      char *key = strdup(key_buffer);
+      char *value = strdup(value_buffer);
+      if (!key || !value || extra_attributes_index + 2 >= extra_attributes_capacity) {
+        free(key);
+        free(value);
+        return false;
+      }
+      data_out->extra_attributes[extra_attributes_index] = key;
+      data_out->extra_attributes[extra_attributes_index + 1] = value;
+      extra_attributes_index += 2;
     }
 
     // Validate all required fields were found
@@ -595,9 +646,13 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     if (data.telemetry_sdk_language) free((void *)data.telemetry_sdk_language);
     if (data.telemetry_sdk_version) free((void *)data.telemetry_sdk_version);
     if (data.telemetry_sdk_name) free((void *)data.telemetry_sdk_name);
-    if (data.resources) {
-      for (int i = 0; data.resources[i] != NULL; i++) free((void *)data.resources[i]);
-      free((void *)data.resources);
+    if (data.resource_attributes) {
+      for (int i = 0; data.resource_attributes[i] != NULL; i++) free((void *)data.resource_attributes[i]);
+      free((void *)data.resource_attributes);
+    }
+    if (data.extra_attributes) {
+      for (int i = 0; data.extra_attributes[i] != NULL; i++) free((void *)data.extra_attributes[i]);
+      free((void *)data.extra_attributes);
     }
   }
 
