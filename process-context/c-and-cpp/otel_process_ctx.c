@@ -80,7 +80,7 @@ typedef struct __attribute__((packed, aligned(8))) {
   char otel_process_ctx_signature[8];        // Always "OTEL_CTX"
   uint32_t otel_process_ctx_version;         // Always > 0, incremented when the data structure changes, currently v2
   uint32_t otel_process_payload_size;        // Always > 0, size of storage
-  uint64_t otel_process_monotonic_published_at_ns; // Timestamp from when the context was published in nanoseconds from CLOCK_MONOTONIC. 0 during updates.
+  uint64_t otel_process_monotonic_published_at_ns; // Timestamp from when the context was published in nanoseconds from CLOCK_BOOTTIME. 0 during updates.
      char *otel_process_payload;             // Always non-null, points to the storage for the data; expected to be a protobuf map of string key/value pairs, null-terminated
 } otel_process_ctx_mapping;
 
@@ -109,7 +109,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
 
 static uint64_t monotonic_time_now_ns(void) {
   struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) == -1) return 0;
+  if (clock_gettime(CLOCK_BOOTTIME, &ts) == -1) return 0;
   return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 }
 
