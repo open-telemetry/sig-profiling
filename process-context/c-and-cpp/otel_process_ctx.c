@@ -80,8 +80,8 @@ typedef struct __attribute__((packed, aligned(8))) {
   char otel_process_ctx_signature[8];        // Always "OTEL_CTX"
   uint32_t otel_process_ctx_version;         // Always > 0, incremented when the data structure changes, currently v2
   uint32_t otel_process_payload_size;        // Always > 0, size of storage
-  uint64_t otel_process_ctx_published_at_ns; // Timestamp from when the context was published in nanoseconds since epoch. 0 during updates.
-  char *otel_process_payload;                // Always non-null, points to the storage for the data; expected to be a protobuf map of string key/value pairs, null-terminated
+  uint64_t otel_process_monotonic_published_at_ns; // Timestamp from when the context was published in nanoseconds from CLOCK_MONOTONIC. 0 during updates.
+     char *otel_process_payload;             // Always non-null, points to the storage for the data; expected to be a protobuf map of string key/value pairs, null-terminated
 } otel_process_ctx_mapping;
 
 /**
@@ -104,12 +104,12 @@ typedef struct {
  */
 static otel_process_ctx_state published_state;
 
-static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns, const otel_process_ctx_data *data);
+static otel_process_ctx_result otel_process_ctx_update(uint64_t monotonic_published_at_ns, const otel_process_ctx_data *data);
 static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **out, uint32_t *out_size, otel_process_ctx_data data);
 
-static uint64_t time_now_ns(void) {
+static uint64_t monotonic_time_now_ns(void) {
   struct timespec ts;
-  if (clock_gettime(CLOCK_REALTIME, &ts) == -1) return 0;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) == -1) return 0;
   return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 }
 
@@ -122,13 +122,13 @@ static bool ctx_is_published(otel_process_ctx_state state) {
 otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *data) {
   if (!data) return (otel_process_ctx_result) {.success = false, .error_message = "otel_process_ctx_data is NULL (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
 
-  uint64_t published_at_ns = time_now_ns();
-  if (published_at_ns == 0) {
+  uint64_t monotonic_published_at_ns = monotonic_time_now_ns();
+  if (monotonic_published_at_ns == 0) {
     return (otel_process_ctx_result) {.success = false, .error_message = "Failed to get current time (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   }
 
   // Step: If the context has been published by this process, update it in place
-  if (ctx_is_published(published_state)) return otel_process_ctx_update(published_at_ns, data);
+  if (ctx_is_published(published_state)) return otel_process_ctx_update(monotonic_published_at_ns, data);
 
   // Step: Drop any previous context state if it exists
   // No state should be around anywhere after this step.
@@ -184,24 +184,24 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   }
 
   // Step: Populate the mapping
-  // The payload and any extra fields must come first and not be reordered with the published_at_ns by the compiler.
+  // The payload and any extra fields must come first and not be reordered with the monotonic_published_at_ns by the compiler.
   *published_state.mapping = (otel_process_ctx_mapping) {
     .otel_process_ctx_signature = { 'O', 'T', 'E', 'L', '_', 'C', 'T', 'X' },
     .otel_process_ctx_version = 2,
     .otel_process_payload_size = payload_size,
-    .otel_process_ctx_published_at_ns = 0, // Set in "Step: Populate the published_at_ns into the mapping" below
+    .otel_process_monotonic_published_at_ns = 0, // Set in "Step: Populate the monotonic_published_at_ns into the mapping" below
     .otel_process_payload = published_state.payload
   };
 
-  // Step: Synchronization - Mapping has been filled and is missing published_at_ns
-  // Make sure the initialization of the mapping + payload above does not get reordered with setting the published_at_ns below. Setting
-  // the published_at_ns is what tells an outside reader that the context is fully published.
+  // Step: Synchronization - Mapping has been filled and is missing monotonic_published_at_ns
+  // Make sure the initialization of the mapping + payload above does not get reordered with setting the monotonic_published_at_ns below. Setting
+  // the monotonic_published_at_ns is what tells an outside reader that the context is fully published.
   atomic_thread_fence(memory_order_seq_cst);
 
-  // Step: Populate the published_at_ns into the mapping
-  // The published_at_ns must come last and not be reordered with the fields above by the compiler. After this step, external readers
-  // can read the published_at_ns and know that the payload is ready to be read.
-  published_state.mapping->otel_process_ctx_published_at_ns = published_at_ns;
+  // Step: Populate the monotonic_published_at_ns into the mapping
+  // The monotonic_published_at_ns must come last and not be reordered with the fields above by the compiler. After this step, external readers
+  // can read the monotonic_published_at_ns and know that the payload is ready to be read.
+  published_state.mapping->otel_process_monotonic_published_at_ns = monotonic_published_at_ns;
 
   // Step: Attempt to name the mapping so outside readers can:
   // * Find it by name
@@ -243,14 +243,14 @@ bool otel_process_ctx_drop_current(void) {
   return success;
 }
 
-static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns, const otel_process_ctx_data *data) {
+static otel_process_ctx_result otel_process_ctx_update(uint64_t monotonic_published_at_ns, const otel_process_ctx_data *data) {
   if (data == NULL || !ctx_is_published(published_state)) {
     return (otel_process_ctx_result) {.success = false, .error_message = "Unexpected: otel_process_ctx_data is NULL or context is not published (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
   }
 
-  if (published_at_ns == published_state.mapping->otel_process_ctx_published_at_ns) {
+  if (monotonic_published_at_ns == published_state.mapping->otel_process_monotonic_published_at_ns) {
     // Advance published_at_ns to allow readers to detect the update
-    published_at_ns++;
+    monotonic_published_at_ns++;
   }
 
   // Step: Prepare the new payload to be published
@@ -260,9 +260,9 @@ static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns,
   otel_process_ctx_result result = otel_process_ctx_encode_protobuf_payload(&payload, &payload_size, *data);
   if (!result.success) return result;
 
-  // Step: Zero out published_at_ns in the mapping
+  // Step: Zero out monotonic_published_at_ns in the mapping
   // This enables readers to detect that an update is in-progress
-  published_state.mapping->otel_process_ctx_published_at_ns = 0;
+  published_state.mapping->otel_process_monotonic_published_at_ns = 0;
 
   // Step: Synchronization - Make sure readers observe the zeroing above before anything else below
   atomic_thread_fence(memory_order_seq_cst);
@@ -274,9 +274,9 @@ static otel_process_ctx_result otel_process_ctx_update(uint64_t published_at_ns,
   // Step: Synchronization - Make sure readers observe the updated data before anything else below
   atomic_thread_fence(memory_order_seq_cst);
 
-  // Step: Install new published_at_ns
+  // Step: Install new monotonic_published_at_ns
   // The update is now complete -- readers that observe the new timestamp will observe the updated payload
-  published_state.mapping->otel_process_ctx_published_at_ns = published_at_ns;
+  published_state.mapping->otel_process_monotonic_published_at_ns = monotonic_published_at_ns;
 
   // Step: Attempt to name the mapping so outside readers can detect the update
   if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, published_state.mapping, sizeof(otel_process_ctx_mapping), OTEL_CTX_SIGNATURE) == -1) {
