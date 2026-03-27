@@ -7,36 +7,12 @@
   #define _GNU_SOURCE
 #endif
 
-#ifdef __cplusplus
-  #include <atomic>
-  using std::atomic_thread_fence;
-  using std::memory_order_seq_cst;
-#else
-  #include <stdatomic.h>
-#endif
-#include <stdint.h>
+// Note: Things here are needed for NOOP. Things that are only for non-NOOP get added further below.
+
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <sys/prctl.h>
-#include <time.h>
-#include <unistd.h>
 
 #define ADD_QUOTES_HELPER(x) #x
 #define ADD_QUOTES(x) ADD_QUOTES_HELPER(x)
-#define KEY_VALUE_LIMIT 4096
-#define UINT14_MAX 16383
-#define OTEL_CTX_SIGNATURE "OTEL_CTX"
-
-#ifndef PR_SET_VMA
-  #define PR_SET_VMA            0x53564d41
-  #define PR_SET_VMA_ANON_NAME  0
-#endif
-
-#ifndef MFD_NOEXEC_SEAL
-  #define MFD_NOEXEC_SEAL 8U
-#endif
 
 static const otel_process_ctx_data empty_data = {
   .deployment_environment_name = NULL,
@@ -75,6 +51,34 @@ static const otel_process_ctx_data empty_data = {
   #endif // OTEL_PROCESS_CTX_NO_READ
 #else // OTEL_PROCESS_CTX_NOOP
 
+#ifdef __cplusplus
+  #include <atomic>
+  using std::atomic_thread_fence;
+  using std::memory_order_seq_cst;
+#else
+  #include <stdatomic.h>
+#endif
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/prctl.h>
+#include <time.h>
+#include <unistd.h>
+
+#define KEY_VALUE_LIMIT 4096
+#define UINT14_MAX 16383
+#define OTEL_CTX_SIGNATURE "OTEL_CTX"
+
+#ifndef PR_SET_VMA
+  #define PR_SET_VMA            0x53564d41
+  #define PR_SET_VMA_ANON_NAME  0
+#endif
+
+#ifndef MFD_NOEXEC_SEAL
+  #define MFD_NOEXEC_SEAL 8U
+#endif
+
 /**
  * The process context data that's written into the published anonymous mapping.
  *
@@ -85,7 +89,7 @@ typedef struct __attribute__((packed, aligned(8))) {
   uint32_t otel_process_ctx_version;         // Always > 0, incremented when the data structure changes, currently v2
   uint32_t otel_process_payload_size;        // Always > 0, size of storage
   uint64_t otel_process_monotonic_published_at_ns; // Timestamp from when the context was published in nanoseconds from CLOCK_BOOTTIME. 0 during updates.
-     char *otel_process_payload;             // Always non-null, points to the storage for the data; expected to be a protobuf map of string key/value pairs, null-terminated
+  char *otel_process_payload;                // Always non-null, points to the storage for the data; expected to be a protobuf map of string key/value pairs, null-terminated
 } otel_process_ctx_mapping;
 
 /**
@@ -158,6 +162,7 @@ otel_process_ctx_result otel_process_ctx_publish(const otel_process_ctx_data *da
   if (fd >= 0) {
     // Try to create mapping from memfd
     if (ftruncate(fd, mapping_size) == -1) {
+      close(fd); // Swallow errors here, truncation already failed anyway
       otel_process_ctx_drop_current();
       return (otel_process_ctx_result) {.success = false, .error_message = "Failed to truncate memfd (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
     }
@@ -460,11 +465,17 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
       size_t array_value_content_size = protobuf_otel_array_value_content_size(data.thread_ctx_config->attribute_key_map);
       size_t any_value_content_size = protobuf_record_size(array_value_content_size);
       size_t kv_content_size = protobuf_string_size("threadlocal.attribute_key_map") + protobuf_record_size(any_value_content_size);
+      if (kv_content_size > UINT14_MAX) {
+        return (otel_process_ctx_result) {.success = false, .error_message = "Encoded size of attribute_key_map exceeds UINT14_MAX limit (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+      }
       thread_ctx_pairs_size += protobuf_record_size(kv_content_size);
     }
   }
 
   size_t resource_size = pairs_size + resource_attributes_pairs_size;
+  if (resource_size > UINT14_MAX) {
+    return (otel_process_ctx_result) {.success = false, .error_message = "Encoded size of resource attributes exceeds UINT14_MAX limit (" __FILE__ ":" ADD_QUOTES(__LINE__) ")"};
+  }
   size_t total_size = protobuf_record_size(resource_size) + extra_attributes_pairs_size + thread_ctx_pairs_size;
 
   char *encoded = (char *) calloc(total_size, 1);
