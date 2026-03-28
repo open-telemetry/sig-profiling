@@ -54,6 +54,7 @@ func main() {
 
 	if err := (profcheck.ConformanceChecker{CheckDictionaryDuplicates: *checkDupes, CheckSampleTimestampShape: *checkSampleShapes}).Check(&data); err != nil {
 		fmt.Printf("%s: conformance checks failed: %v\n", inputPath, err)
+		os.Exit(1)
 	}
 	fmt.Printf("%s: conformance checks passed\n", inputPath)
 }
