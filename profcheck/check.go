@@ -202,7 +202,7 @@ func (c ConformanceChecker) checkValueType(valueType *profiles.ValueType, dict *
 	if err := c.checkIndex(len(dict.StringTable), valueType.GetTypeStrindex()); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "type_strindex"))
 	}
-	return nil
+	return errs
 }
 
 func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, dict *profiles.ProfilesDictionary) error {
