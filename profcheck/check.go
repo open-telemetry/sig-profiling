@@ -400,16 +400,6 @@ func (c ConformanceChecker) checkAttributeIndices(attrIndices []int32, dict *pro
 	return errs
 }
 
-func (c ConformanceChecker) checkIndices(length int, indices []int32) error {
-	var errs error
-	for i, idx := range indices {
-		if err := c.checkIndex(length, idx); err != nil {
-			errs = errors.Join(errs, prefixErrorf(err, "[%d]", i))
-		}
-	}
-	return errs
-}
-
 func (c ConformanceChecker) checkIndex(length int, idx int32) error {
 	if idx < 0 || int(idx) >= length {
 		return fmt.Errorf("index %d is out of range [0..%d)", idx, length)
