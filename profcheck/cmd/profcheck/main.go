@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/open-telemetry/sig-profiling/tools/profcheck"
+	"github.com/open-telemetry/sig-profiling/profcheck"
 
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
