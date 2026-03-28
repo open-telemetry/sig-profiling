@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package profcheck is a tool that verifies that a ProfilesData proto conforms with
+// the signal schema requirements and spec.
 package profcheck
 
 import (
