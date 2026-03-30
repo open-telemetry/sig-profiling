@@ -1,4 +1,4 @@
-module github.com/open-telemetry/sig-profiling/tools/profcheck
+module github.com/open-telemetry/sig-profiling/profcheck
 
 go 1.24.4
 
