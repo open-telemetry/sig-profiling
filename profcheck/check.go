@@ -19,6 +19,7 @@ package profcheck
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
@@ -212,7 +213,16 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 	if err := checkZeroVal(mappingTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
-	for idx, m := range mappingTable {
+
+	type uniqMapping struct {
+		filenameStrIdx int32
+		attrIdxs       []int32
+		memStart       uint64
+		memLimit       uint64
+	}
+	var uniqMappings []uniqMapping
+
+	for idx, m := range mappingTable[1:] {
 		if err := c.checkIndex(len(dict.StringTable), m.FilenameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].filename_strindex", idx))
 		}
@@ -222,8 +232,27 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 		if !(m.MemoryStart == 0 && m.MemoryLimit == 0) && !(m.MemoryStart < m.MemoryLimit) {
 			errs = errors.Join(errs, fmt.Errorf("[%d]: memory_start=%016x, memory_limit=%016x: must be both zero or start < limit", idx, m.MemoryStart, m.MemoryLimit))
 		}
+		if c.CheckDictionaryDuplicates {
+			newMapping := uniqMapping{
+				filenameStrIdx: m.FilenameStrindex,
+				attrIdxs:       m.AttributeIndices,
+				memStart:       m.MemoryStart,
+				memLimit:       m.MemoryLimit,
+			}
+			if slices.ContainsFunc(uniqMappings, func(e uniqMapping) bool {
+				if slices.Equal(newMapping.attrIdxs, e.attrIdxs) {
+					return true
+				}
+				return newMapping.filenameStrIdx == e.filenameStrIdx ||
+					newMapping.memStart == e.memStart ||
+					newMapping.memLimit == e.memLimit
+			}) {
+				errs = errors.Join(errs, fmt.Errorf("duplicate mapping at index %d: %v", idx, m))
+				continue
+			}
+			uniqMappings = append(uniqMappings, newMapping)
+		}
 	}
-	// TODO: Add optional uniqueness check.
 	// TODO: Add optional unreferenced entries check.
 	return errs
 }
