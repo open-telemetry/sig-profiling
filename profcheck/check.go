@@ -315,15 +315,15 @@ func (c ConformanceChecker) checkStringTable(strTable []string) error {
 		return fmt.Errorf("must have empty string at index 0, got %q", strTable[0])
 	}
 	var errs error
-	strIdxs := map[string]int{}
-	for idx, s := range strTable {
-		if origIdx, ok := strIdxs[s]; ok {
-			if c.CheckDictionaryDuplicates {
+	if c.CheckDictionaryDuplicates {
+		strIdxs := map[string]int{}
+		for idx, s := range strTable {
+			if origIdx, ok := strIdxs[s]; ok {
 				errs = errors.Join(errs, fmt.Errorf("duplicate string at index %d, orig index %d: %s", idx, origIdx, s))
+				continue
 			}
-			continue
+			strIdxs[s] = idx
 		}
-		strIdxs[s] = idx
 	}
 	return errs
 }
