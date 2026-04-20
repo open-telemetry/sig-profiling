@@ -240,11 +240,9 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 				memLimit:       m.MemoryLimit,
 			}
 			if slices.ContainsFunc(uniqMappings, func(e uniqMapping) bool {
-				if slices.Equal(newMapping.attrIdxs, e.attrIdxs) {
-					return true
-				}
-				return newMapping.filenameStrIdx == e.filenameStrIdx ||
-					newMapping.memStart == e.memStart ||
+				return newMapping.filenameStrIdx == e.filenameStrIdx &&
+					slices.Equal(newMapping.attrIdxs, e.attrIdxs) &&
+					newMapping.memStart == e.memStart &&
 					newMapping.memLimit == e.memLimit
 			}) {
 				errs = errors.Join(errs, fmt.Errorf("duplicate mapping at index %d: %v", idx, m))
