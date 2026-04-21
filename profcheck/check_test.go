@@ -107,7 +107,7 @@ func TestCheckConformance(t *testing.T) {
 						},
 						{
 							FilenameStrindex: 1,
-							AttributeIndices: []int32{1, 2},
+							AttributeIndices: []int32{2, 1},
 							MemoryStart:      0x4000,
 							MemoryLimit:      0x4200,
 						},
