@@ -219,6 +219,7 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 		attrIdxs       []int32
 		memStart       uint64
 		memLimit       uint64
+		fileOffset     uint64
 	}
 	var uniqMappings []uniqMapping
 
@@ -238,6 +239,7 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 				attrIdxs:       m.AttributeIndices,
 				memStart:       m.MemoryStart,
 				memLimit:       m.MemoryLimit,
+				fileOffset:     m.FileOffset,
 			}
 			if slices.ContainsFunc(uniqMappings, func(e uniqMapping) bool {
 				slices.Sort(newMapping.attrIdxs)
@@ -245,7 +247,8 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 				return newMapping.filenameStrIdx == e.filenameStrIdx &&
 					slices.Equal(newMapping.attrIdxs, e.attrIdxs) &&
 					newMapping.memStart == e.memStart &&
-					newMapping.memLimit == e.memLimit
+					newMapping.memLimit == e.memLimit &&
+					newMapping.fileOffset == e.fileOffset
 			}) {
 				errs = errors.Join(errs, fmt.Errorf("duplicate mapping at index %d: %v", idx, m))
 				continue
