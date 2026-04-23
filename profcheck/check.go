@@ -241,9 +241,10 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 				memLimit:       m.MemoryLimit,
 				fileOffset:     m.FileOffset,
 			}
+			// Sort the slice of IDs before comparing it. So we also make sure
+			// only sorted IDs are added to uniqMappings.
+			slices.Sort(newMapping.attrIdxs)
 			if slices.ContainsFunc(uniqMappings, func(e uniqMapping) bool {
-				slices.Sort(newMapping.attrIdxs)
-				slices.Sort(e.attrIdxs)
 				return newMapping.filenameStrIdx == e.filenameStrIdx &&
 					slices.Equal(newMapping.attrIdxs, e.attrIdxs) &&
 					newMapping.memStart == e.memStart &&
