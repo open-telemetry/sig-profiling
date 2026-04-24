@@ -17,9 +17,11 @@
 package profcheck
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
@@ -216,12 +218,12 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 
 	type uniqMapping struct {
 		filenameStrIdx int32
-		attrIdxs       []int32
+		attrIdxs       string
 		memStart       uint64
 		memLimit       uint64
 		fileOffset     uint64
 	}
-	var uniqMappings []uniqMapping
+	uniqMappings := make(map[uniqMapping]struct{})
 
 	for idx, m := range mappingTable[1:] {
 		if err := c.checkIndex(len(dict.StringTable), m.FilenameStrindex); err != nil {
@@ -236,25 +238,18 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 		if c.CheckDictionaryDuplicates {
 			newMapping := uniqMapping{
 				filenameStrIdx: m.FilenameStrindex,
-				attrIdxs:       m.AttributeIndices,
+				attrIdxs:       asSortedString(m.AttributeIndices),
 				memStart:       m.MemoryStart,
 				memLimit:       m.MemoryLimit,
 				fileOffset:     m.FileOffset,
 			}
-			// Sort the slice of IDs before comparing it. So we also make sure
-			// only sorted IDs are added to uniqMappings.
-			slices.Sort(newMapping.attrIdxs)
-			if slices.ContainsFunc(uniqMappings, func(e uniqMapping) bool {
-				return newMapping.filenameStrIdx == e.filenameStrIdx &&
-					slices.Equal(newMapping.attrIdxs, e.attrIdxs) &&
-					newMapping.memStart == e.memStart &&
-					newMapping.memLimit == e.memLimit &&
-					newMapping.fileOffset == e.fileOffset
-			}) {
-				errs = errors.Join(errs, fmt.Errorf("duplicate mapping at index %d: %v", idx, m))
+
+			if _, exists := uniqMappings[newMapping]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate mapping at index %d: %#v", idx, newMapping))
 				continue
+
 			}
-			uniqMappings = append(uniqMappings, newMapping)
+			uniqMappings[newMapping] = struct{}{}
 		}
 	}
 	// TODO: Add optional unreferenced entries check.
@@ -459,4 +454,21 @@ func prefixErrorf(err error, format string, args ...any) error {
 		return errors.Join(errs...)
 	}
 	return fmt.Errorf("%s: %w", prefix, err)
+}
+
+// asSortedString takes a slice of any ordered type, sorts it,
+// and returns a comma-separated string.
+func asSortedString[T cmp.Ordered](input []T) string {
+	if len(input) == 0 {
+		return ""
+	}
+
+	slices.Sort(input)
+
+	strValues := make([]string, len(input))
+	for i, v := range input {
+		strValues[i] = fmt.Sprint(v)
+	}
+
+	return strings.Join(strValues, ",")
 }
