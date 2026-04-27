@@ -17,11 +17,9 @@
 package profcheck
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
@@ -456,19 +454,13 @@ func prefixErrorf(err error, format string, args ...any) error {
 	return fmt.Errorf("%s: %w", prefix, err)
 }
 
-// asSortedString takes a slice of any ordered type, sorts it,
-// and returns a comma-separated string.
-func asSortedString[T cmp.Ordered](input []T) string {
+// asSortedString takes a slice, sorts it and returns a string.
+func asSortedString(input []int32) string {
 	if len(input) == 0 {
 		return ""
 	}
 
 	slices.Sort(input)
 
-	strValues := make([]string, len(input))
-	for i, v := range input {
-		strValues[i] = fmt.Sprint(v)
-	}
-
-	return strings.Join(strValues, ",")
+	return fmt.Sprint(input)
 }
