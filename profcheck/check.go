@@ -19,6 +19,7 @@ package profcheck
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
@@ -212,7 +213,17 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 	if err := checkZeroVal(mappingTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
-	for idx, m := range mappingTable {
+
+	type uniqMapping struct {
+		filenameStrIdx int32
+		attrIdxs       string
+		memStart       uint64
+		memLimit       uint64
+		fileOffset     uint64
+	}
+	uniqMappings := make(map[uniqMapping]struct{})
+
+	for idx, m := range mappingTable[1:] {
 		if err := c.checkIndex(len(dict.StringTable), m.FilenameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].filename_strindex", idx))
 		}
@@ -222,8 +233,23 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 		if !(m.MemoryStart == 0 && m.MemoryLimit == 0) && !(m.MemoryStart < m.MemoryLimit) {
 			errs = errors.Join(errs, fmt.Errorf("[%d]: memory_start=%016x, memory_limit=%016x: must be both zero or start < limit", idx, m.MemoryStart, m.MemoryLimit))
 		}
+		if c.CheckDictionaryDuplicates {
+			newMapping := uniqMapping{
+				filenameStrIdx: m.FilenameStrindex,
+				attrIdxs:       asSortedString(m.AttributeIndices),
+				memStart:       m.MemoryStart,
+				memLimit:       m.MemoryLimit,
+				fileOffset:     m.FileOffset,
+			}
+
+			if _, exists := uniqMappings[newMapping]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate mapping at index %d: %#v", idx, newMapping))
+				continue
+
+			}
+			uniqMappings[newMapping] = struct{}{}
+		}
 	}
-	// TODO: Add optional uniqueness check.
 	// TODO: Add optional unreferenced entries check.
 	return errs
 }
@@ -445,4 +471,15 @@ func prefixErrorf(err error, format string, args ...any) error {
 		return errors.Join(errs...)
 	}
 	return fmt.Errorf("%s: %w", prefix, err)
+}
+
+// asSortedString takes a slice, sorts it and returns a string.
+func asSortedString(input []int32) string {
+	if len(input) == 0 {
+		return ""
+	}
+
+	slices.Sort(input)
+
+	return fmt.Sprint(input)
 }
