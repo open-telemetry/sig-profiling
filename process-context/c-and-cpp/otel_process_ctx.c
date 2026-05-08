@@ -673,6 +673,14 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
     return true;
   }
 
+  static bool ensure_thread_ctx_config(otel_process_ctx_data *data_out) {
+    if (data_out->thread_ctx_config) return true;
+    otel_thread_ctx_config_data *setup = (otel_thread_ctx_config_data *) calloc(1, sizeof(otel_thread_ctx_config_data));
+    if (!setup) return false;
+    data_out->thread_ctx_config = setup;
+    return true;
+  }
+
   // Simplified protobuf decoder to match the exact encoder above. If the protobuf data doesn't match the encoder, this will
   // return false.
   static bool otel_process_ctx_decode_payload(char *payload, uint32_t payload_size, otel_process_ctx_data *data_out, char *key_buffer, char *value_buffer) {
@@ -759,11 +767,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
         uint8_t kv_field;
         if (!read_protobuf_tag(&ptr, kv_end, &kv_field) || kv_field != 1) return false;
         if (!read_protobuf_string(&ptr, kv_end, key_buffer)) return false;
-        if (!data_out->thread_ctx_config) {
-          otel_thread_ctx_config_data *setup = (otel_thread_ctx_config_data *) calloc(1, sizeof(otel_thread_ctx_config_data));
-          if (!setup) return false;
-          data_out->thread_ctx_config = setup;
-        }
+        if (!ensure_thread_ctx_config(data_out)) return false;
         if (!read_protobuf_array_value_strings(&ptr, kv_end, value_buffer, &((otel_thread_ctx_config_data *)data_out->thread_ctx_config)->attribute_key_map)) return false;
       } else {
         if (!read_protobuf_keyvalue(&ptr, kv_end, key_buffer, value_buffer)) return false;
@@ -773,10 +777,8 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
 
         // Dispatch based on key
         if (strcmp(key_buffer, "threadlocal.schema_version") == 0) {
-          otel_thread_ctx_config_data *setup = (otel_thread_ctx_config_data *) calloc(1, sizeof(otel_thread_ctx_config_data));
-          if (!setup) { free(value); return false; }
-          setup->schema_version = value;
-          data_out->thread_ctx_config = setup;
+          if (!ensure_thread_ctx_config(data_out)) { free(value); return false; }
+          ((otel_thread_ctx_config_data *)data_out->thread_ctx_config)->schema_version = value;
         } else {
           char *key = strdup(key_buffer);
           if (!key || extra_attributes_index + 2 >= extra_attributes_capacity) {
