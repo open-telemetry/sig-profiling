@@ -768,6 +768,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
         if (!read_protobuf_tag(&ptr, kv_end, &kv_field) || kv_field != 1) return false;
         if (!read_protobuf_string(&ptr, kv_end, key_buffer)) return false;
         if (!ensure_thread_ctx_config(data_out)) return false;
+        if (data_out->thread_ctx_config->attribute_key_map != NULL) return false;
         if (!read_protobuf_array_value_strings(&ptr, kv_end, value_buffer, &((otel_thread_ctx_config_data *)data_out->thread_ctx_config)->attribute_key_map)) return false;
       } else {
         if (!read_protobuf_keyvalue(&ptr, kv_end, key_buffer, value_buffer)) return false;
@@ -778,6 +779,7 @@ static otel_process_ctx_result otel_process_ctx_encode_protobuf_payload(char **o
         // Dispatch based on key
         if (strcmp(key_buffer, "threadlocal.schema_version") == 0) {
           if (!ensure_thread_ctx_config(data_out)) { free(value); return false; }
+          if (data_out->thread_ctx_config->schema_version != NULL) { free(value); return false; }
           ((otel_thread_ctx_config_data *)data_out->thread_ctx_config)->schema_version = value;
         } else {
           char *key = strdup(key_buffer);
