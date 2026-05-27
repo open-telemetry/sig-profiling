@@ -33,287 +33,349 @@ func TestCheckConformance(t *testing.T) {
 		disableDupesCheck bool
 		checkSampleShapes bool
 		wantErr           string
-	}{{
-		desc:    "no profiles",
-		data:    &profiles.ProfilesData{},
-		wantErr: "resource profiles are empty",
-	}, {
-		desc: "minimal valid profile",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{}},
+	}{
+		{
+			desc:    "no profiles",
+			data:    &profiles.ProfilesData{},
+			wantErr: "resource profiles are empty",
+		},
+		{
+			desc: "minimal valid profile",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
 				}},
-			}},
-		},
-		wantErr: "",
-	}, {
-		desc: "no scope profiles",
-		data: &profiles.ProfilesData{
-			Dictionary:       zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{}},
-		},
-		wantErr: "resource profiles has no scope profiles",
-	}, {
-		desc: "no profiles in scope",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{}},
-			}},
-		},
-		wantErr: "scope profiles has no profiles",
-	}, {
-		desc: "no empty string at pos 0",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictWithStringTable([]string{"a"}),
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{}},
-				}},
-			}},
-		},
-		wantErr: "must have empty string at index 0",
-	}, {
-		desc: "duplicate string",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{}},
-				}},
-			}},
-		},
-		wantErr: "duplicate string",
-	}, {
-		desc: "duplicate string (disabled check)",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{}},
-				}},
-			}},
-		},
-		disableDupesCheck: true,
-		wantErr:           "",
-	}, {
-		desc: "duplicate attribute key in location",
-		data: &profiles.ProfilesData{
-			Dictionary: &profiles.ProfilesDictionary{
-				MappingTable: []*profiles.Mapping{{}},
-				LocationTable: []*profiles.Location{
-					{},
-					{AttributeIndices: []int32{1, 2}},
-				},
-				FunctionTable: []*profiles.Function{{}},
-				LinkTable:     []*profiles.Link{{}},
-				StringTable:   []string{"", "k1"},
-				AttributeTable: []*profiles.KeyValueAndUnit{
-					{},
-					{KeyStrindex: 1, Value: makeAnyValue("v1")},
-					{KeyStrindex: 1, Value: makeAnyValue("v2")},
-				},
-				StackTable: []*profiles.Stack{{}},
 			},
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{}},
-				}},
-			}},
+			wantErr: "",
 		},
-		wantErr: `duplicate key "k1"`,
-	}, {
-		desc: "timestamp before start",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							TimestampsUnixNano: []uint64{99},
+		{
+			desc: "no scope profiles",
+			data: &profiles.ProfilesData{
+				Dictionary:       zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{}},
+			},
+			wantErr: "resource profiles has no scope profiles",
+		},
+		{
+			desc: "no profiles in scope",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{}},
+				}},
+			},
+			wantErr: "scope profiles has no profiles",
+		},
+		{
+			desc: "no empty string at pos 0",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictWithStringTable([]string{"a"}),
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "must have empty string at index 0",
+		},
+		{
+			desc: "duplicate string",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate string",
+		},
+		{
+			desc: "duplicate mapping",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{
+						{},
+						{
+							FilenameStrindex: 1,
+							AttributeIndices: []int32{1, 2},
+							MemoryStart:      0x4000,
+							MemoryLimit:      0x4200,
+						},
+						{
+							FilenameStrindex: 1,
+							AttributeIndices: []int32{2, 1},
+							MemoryStart:      0x4000,
+							MemoryLimit:      0x4200,
+						},
+					},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable:     []*profiles.Link{{}},
+					StringTable:   []string{"", "filename", "attr1", "attr2"},
+					AttributeTable: []*profiles.KeyValueAndUnit{
+						{},
+						{
+							KeyStrindex: 1, Value: makeAnyValue("v1"),
+						},
+						{
+							KeyStrindex: 2, Value: makeAnyValue("v2"),
+						},
+					},
+					StackTable: []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate mapping",
+		},
+		{
+			desc: "duplicate string (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
+			desc: "duplicate attribute key in location",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{
+						{},
+						{AttributeIndices: []int32{1, 2}},
+					},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable:     []*profiles.Link{{}},
+					StringTable:   []string{"", "k1"},
+					AttributeTable: []*profiles.KeyValueAndUnit{
+						{},
+						{KeyStrindex: 1, Value: makeAnyValue("v1")},
+						{KeyStrindex: 1, Value: makeAnyValue("v2")},
+					},
+					StackTable: []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: `duplicate key "k1"`,
+		},
+		{
+			desc: "timestamp before start",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								TimestampsUnixNano: []uint64{99},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "timestamps_unix_nano[0]=99 is outside profile time range [100, 110)",
 		},
-		wantErr: "timestamps_unix_nano[0]=99 is outside profile time range [100, 110)",
-	}, {
-		desc: "timestamp at start",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							TimestampsUnixNano: []uint64{100},
+		{
+			desc: "timestamp at start",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								TimestampsUnixNano: []uint64{100},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "",
 		},
-		wantErr: "",
-	}, {
-		desc: "timestamp at end (exclusive)",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							TimestampsUnixNano: []uint64{110},
+		{
+			desc: "timestamp at end (exclusive)",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								TimestampsUnixNano: []uint64{110},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "timestamps_unix_nano[0]=110 is outside profile time range [100, 110)",
 		},
-		wantErr: "timestamps_unix_nano[0]=110 is outside profile time range [100, 110)",
-	}, {
-		desc: "timestamp after end",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							TimestampsUnixNano: []uint64{111},
+		{
+			desc: "timestamp after end",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								TimestampsUnixNano: []uint64{111},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "timestamps_unix_nano[0]=111 is outside profile time range [100, 110)",
 		},
-		wantErr: "timestamps_unix_nano[0]=111 is outside profile time range [100, 110)",
-	}, {
-		desc: "sample with no values and no timestamps",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						Samples: []*profiles.Sample{{}},
-					}},
-				}},
-			}},
-		},
-		wantErr: "sample must have at least one values or timestamps_unix_nano entry",
-	}, {
-		desc: "sample with values and timestamps length mismatch",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							Values:             []int64{1},
-							TimestampsUnixNano: []uint64{100, 101},
+		{
+			desc: "sample with no values and no timestamps",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							Samples: []*profiles.Sample{{}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "sample must have at least one values or timestamps_unix_nano entry",
 		},
-		wantErr: "values (len=1) and timestamps_unix_nano (len=2) must contain the same number of elements",
-	}, {
-		desc: "sample with values only",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						Samples: []*profiles.Sample{{
-							Values: []int64{1},
+		{
+			desc: "sample with values and timestamps length mismatch",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								Values:             []int64{1},
+								TimestampsUnixNano: []uint64{100, 101},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "values (len=1) and timestamps_unix_nano (len=2) must contain the same number of elements",
 		},
-		wantErr: "",
-	}, {
-		desc: "sample with timestamps only",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							TimestampsUnixNano: []uint64{100},
+		{
+			desc: "sample with values only",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							Samples: []*profiles.Sample{{
+								Values: []int64{1},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "",
 		},
-		wantErr: "",
-	}, {
-		desc: "sample with values and timestamps matching",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							Values:             []int64{1},
-							TimestampsUnixNano: []uint64{100},
+		{
+			desc: "sample with timestamps only",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								TimestampsUnixNano: []uint64{100},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "",
 		},
-		wantErr: "",
-	}, {
-		desc: "mixed sample types",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							Values: []int64{1},
-						}, {
-							TimestampsUnixNano: []uint64{100},
+		{
+			desc: "sample with values and timestamps matching",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								Values:             []int64{1},
+								TimestampsUnixNano: []uint64{100},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			wantErr: "",
 		},
-		checkSampleShapes: true,
-		wantErr:           "does not match expected sample shape",
-	}, {
-		desc: "mixed sample types (disabled check)",
-		data: &profiles.ProfilesData{
-			Dictionary: zeroDictionary,
-			ResourceProfiles: []*profiles.ResourceProfiles{{
-				ScopeProfiles: []*profiles.ScopeProfiles{{
-					Profiles: []*profiles.Profile{{
-						TimeUnixNano: 100,
-						DurationNano: 10,
-						Samples: []*profiles.Sample{{
-							Values: []int64{1},
-						}, {
-							TimestampsUnixNano: []uint64{100},
+		{
+			desc: "mixed sample types",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								Values: []int64{1},
+							}, {
+								TimestampsUnixNano: []uint64{100},
+							}},
 						}},
 					}},
 				}},
-			}},
+			},
+			checkSampleShapes: true,
+			wantErr:           "does not match expected sample shape",
 		},
-		checkSampleShapes: false,
-		wantErr:           "",
-	}} {
+		{
+			desc: "mixed sample types (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								Values: []int64{1},
+							}, {
+								TimestampsUnixNano: []uint64{100},
+							}},
+						}},
+					}},
+				}},
+			},
+			checkSampleShapes: false,
+			wantErr:           "",
+		},
+	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			c := ConformanceChecker{CheckDictionaryDuplicates: !tc.disableDupesCheck, CheckSampleTimestampShape: tc.checkSampleShapes}
 			err := c.Check(tc.data)
