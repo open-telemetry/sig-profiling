@@ -1,0 +1,17 @@
+[settings]
+python.uv_venv_auto = "source"
+
+[tasks.html]
+description = "Export the marimo notebook to gzipped HTML"
+sources = ["otlp-size-analysis.py"]
+outputs = ["otlp-size-analysis.html"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+uv run marimo export html otlp-size-analysis.py --output "$tmp" --force
+gzip -9 --stdout "$tmp" > otlp-size-analysis.html
+'''
