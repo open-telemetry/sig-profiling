@@ -29,6 +29,7 @@ import (
 type ConformanceChecker struct {
 	CheckDictionaryDuplicates bool
 	CheckSampleTimestampShape bool
+	CheckReferences           bool
 }
 
 func (c ConformanceChecker) Check(data *profiles.ProfilesData) error {
@@ -44,6 +45,11 @@ func (c ConformanceChecker) Check(data *profiles.ProfilesData) error {
 	}
 	if err := c.checkDictionary(dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "dictionary"))
+	}
+	if c.CheckReferences {
+		if err := c.checkReferences(data); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "dictionary"))
+		}
 	}
 	return errs
 }
@@ -224,7 +230,6 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 		}
 	}
 	// TODO: Add optional uniqueness check.
-	// TODO: Add optional unreferenced entries check.
 	return errs
 }
 
@@ -247,7 +252,6 @@ func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, di
 		}
 	}
 	// TODO: Add optional uniqueness check.
-	// TODO: Add optional unreferenced entries check.
 	return errs
 }
 
@@ -285,7 +289,6 @@ func (c ConformanceChecker) checkFunctionTable(funcTable []*profiles.Function, d
 		}
 	}
 	// TODO: Add optional uniqueness check.
-	// TODO: Add optional unreferenced entries check.
 	return errs
 }
 
@@ -303,7 +306,6 @@ func (c ConformanceChecker) checkLinkTable(linkTable []*profiles.Link) error {
 		}
 	}
 	// TODO: Add optional uniqueness check.
-	// TODO: Add optional unreferenced entries check.
 	return errs
 }
 
@@ -342,7 +344,6 @@ func (c ConformanceChecker) checkAttributeTable(attrTable []*profiles.KeyValueAn
 		}
 	}
 	// TODO: Add optional uniqueness check.
-	// TODO: Add optional unreferenced entries check.
 	return errs
 }
 
@@ -378,7 +379,6 @@ func (c ConformanceChecker) checkStackTable(stackTable []*profiles.Stack, lenLoc
 		}
 	}
 	// TODO: Add optional uniqueness check.
-	// TODO: Add optional unreferenced entries check.
 	return errs
 }
 
@@ -396,6 +396,129 @@ func checkZeroVal[T any, P interface {
 		return fmt.Errorf("must have zero value %#v at index 0, got %#v", zeroVal, table[0])
 	}
 	return nil
+}
+
+// checkReferences verifies that every entry in every table of the dictionary
+// is referenced.
+func (c ConformanceChecker) checkReferences(data *profiles.ProfilesData) error {
+	dict := data.Dictionary
+
+	strRefs := make(map[int32]bool)
+	attrRefs := make(map[int32]bool)
+	mappingRefs := make(map[int32]bool)
+	funcRefs := make(map[int32]bool)
+	locRefs := make(map[int32]bool)
+	stackRefs := make(map[int32]bool)
+	linkRefs := make(map[int32]bool)
+
+	// Index 0 is the mandatory zero-value sentinel in every table and is always
+	// considered referenced.
+	strRefs[0] = true
+	attrRefs[0] = true
+	mappingRefs[0] = true
+	funcRefs[0] = true
+	locRefs[0] = true
+	stackRefs[0] = true
+	linkRefs[0] = true
+
+	// Collect references from all profiles.
+	for _, rp := range data.ResourceProfiles {
+		for _, sp := range rp.ScopeProfiles {
+			for _, prof := range sp.Profiles {
+				strRefs[prof.GetSampleType().GetTypeStrindex()] = true
+				strRefs[prof.GetSampleType().GetUnitStrindex()] = true
+				strRefs[prof.GetPeriodType().GetTypeStrindex()] = true
+				strRefs[prof.GetPeriodType().GetUnitStrindex()] = true
+				for _, idx := range prof.AttributeIndices {
+					attrRefs[idx] = true
+				}
+				for _, s := range prof.Samples {
+					stackRefs[s.StackIndex] = true
+					linkRefs[s.LinkIndex] = true
+					for _, idx := range s.AttributeIndices {
+						attrRefs[idx] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Collect references from StackTable to LocationTable.
+	for _, stack := range dict.StackTable {
+		for _, idx := range stack.LocationIndices {
+			locRefs[idx] = true
+		}
+	}
+
+	// Collect references from LocationTable to MappingTable, FunctionTable, AttributeTable.
+	for _, loc := range dict.LocationTable {
+		mappingRefs[loc.MappingIndex] = true
+		for _, idx := range loc.AttributeIndices {
+			attrRefs[idx] = true
+		}
+		for _, line := range loc.Lines {
+			funcRefs[line.FunctionIndex] = true
+		}
+	}
+
+	// Collect references from MappingTable to StringTable, AttributeTable.
+	for _, m := range dict.MappingTable {
+		strRefs[m.FilenameStrindex] = true
+		for _, idx := range m.AttributeIndices {
+			attrRefs[idx] = true
+		}
+	}
+
+	// Collect references from FunctionTable to StringTable.
+	for _, fnc := range dict.FunctionTable {
+		strRefs[fnc.NameStrindex] = true
+		strRefs[fnc.SystemNameStrindex] = true
+		strRefs[fnc.FilenameStrindex] = true
+	}
+
+	// Collect references from AttributeTable to StringTable.
+	for _, kvu := range dict.AttributeTable {
+		strRefs[kvu.KeyStrindex] = true
+		strRefs[kvu.UnitStrindex] = true
+	}
+
+	var errs error
+	for idx := range dict.StringTable {
+		if !strRefs[int32(idx)] {
+			errs = errors.Join(errs, fmt.Errorf("string_table: unreferenced entry at index %d", idx))
+		}
+	}
+	for idx := range dict.AttributeTable {
+		if !attrRefs[int32(idx)] {
+			errs = errors.Join(errs, fmt.Errorf("attribute_table: unreferenced entry at index %d", idx))
+		}
+	}
+	for idx := range dict.MappingTable {
+		if !mappingRefs[int32(idx)] {
+			errs = errors.Join(errs, fmt.Errorf("mapping_table: unreferenced entry at index %d", idx))
+		}
+	}
+	for idx := range dict.FunctionTable {
+		if !funcRefs[int32(idx)] {
+			errs = errors.Join(errs, fmt.Errorf("function_table: unreferenced entry at index %d", idx))
+		}
+	}
+	for idx := range dict.LocationTable {
+		if !locRefs[int32(idx)] {
+			errs = errors.Join(errs, fmt.Errorf("location_table: unreferenced entry at index %d", idx))
+		}
+	}
+	for idx := range dict.StackTable {
+		if !stackRefs[int32(idx)] {
+			errs = errors.Join(errs, fmt.Errorf("stack_table: unreferenced entry at index %d", idx))
+		}
+	}
+	for idx := range dict.LinkTable {
+		if !linkRefs[int32(idx)] {
+			errs = errors.Join(errs, fmt.Errorf("link_table: unreferenced entry at index %d", idx))
+		}
+	}
+	return errs
 }
 
 func (c ConformanceChecker) checkAttributeIndices(attrIndices []int32, dict *profiles.ProfilesDictionary) error {

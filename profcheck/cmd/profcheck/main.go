@@ -27,8 +27,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var checkDupes = flag.Bool("check-dupes", false, "Enable check for duplicates in the dictionary")
-var checkSampleShapes = flag.Bool("check-sample-shapes", true, "Enable check for sample shapes")
+var (
+	checkDupes        = flag.Bool("check-dupes", false, "Enable check for duplicates in the dictionary")
+	checkSampleShapes = flag.Bool("check-sample-shapes", true, "Enable check for sample shapes")
+	checkReferences   = flag.Bool("check-references", true, "Enable check for reference check")
+)
 
 func main() {
 	flag.Parse()
@@ -52,7 +55,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (profcheck.ConformanceChecker{CheckDictionaryDuplicates: *checkDupes, CheckSampleTimestampShape: *checkSampleShapes}).Check(&data); err != nil {
+	if err := (profcheck.ConformanceChecker{
+		CheckDictionaryDuplicates: *checkDupes,
+		CheckSampleTimestampShape: *checkSampleShapes,
+		CheckReferences:           *checkReferences,
+	}).Check(&data); err != nil {
 		fmt.Printf("%s: conformance checks failed: %v\n", inputPath, err)
 		os.Exit(1)
 	}
