@@ -145,6 +145,9 @@ func (c ConformanceChecker) checkSample(s *profiles.Sample, startUnixNano uint64
 		}
 		shape = SampleShapeBoth
 	} else if hasValues {
+		if len(s.Values) != 1 {
+			errs = errors.Join(errs, fmt.Errorf("values (len=%d) must contain a single element if timestamps_unix_nano is not set", len(s.Values)))
+		}
 		shape = SampleShapeValuesOnly
 	} else if hasTimestamps {
 		shape = SampleShapeTimestampsOnly
