@@ -204,7 +204,8 @@ func TestCheckConformance(t *testing.T) {
 				}},
 			}},
 		},
-		wantErr: "sample must have at least one values or timestamps_unix_nano entry",
+		checkSampleShapes: true,
+		wantErr:           "sample must have at least one values or timestamps_unix_nano entry",
 	}, {
 		desc: "sample with values and timestamps length mismatch",
 		data: &profiles.ProfilesData{
@@ -222,7 +223,8 @@ func TestCheckConformance(t *testing.T) {
 				}},
 			}},
 		},
-		wantErr: "values (len=1) and timestamps_unix_nano (len=2) must contain the same number of elements",
+		checkSampleShapes: true,
+		wantErr:           "values (len=1) and timestamps_unix_nano (len=2) must contain the same number of elements",
 	}, {
 		desc: "sample with values only",
 		data: &profiles.ProfilesData{
@@ -237,7 +239,8 @@ func TestCheckConformance(t *testing.T) {
 				}},
 			}},
 		},
-		wantErr: "",
+		checkSampleShapes: true,
+		wantErr:           "",
 	}, {
 		desc: "sample with timestamps only",
 		data: &profiles.ProfilesData{
@@ -254,6 +257,7 @@ func TestCheckConformance(t *testing.T) {
 				}},
 			}},
 		},
+		checkSampleShapes: true,
 		wantErr: "",
 	}, {
 		desc: "sample with values and timestamps matching",
@@ -272,6 +276,7 @@ func TestCheckConformance(t *testing.T) {
 				}},
 			}},
 		},
+		checkSampleShapes: true,
 		wantErr: "",
 	}, {
 		desc: "mixed sample types",
