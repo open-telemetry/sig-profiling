@@ -1,6 +1,6 @@
 # OpenTelemetry Process Context - C and C++ reference implementation
 
-This is a reference implementation of the [OpenTelemetry Process Context specification](https://github.com/open-telemetry/opentelemetry-specification/pull/4719/) for C and C++.
+This is a reference implementation of the [OpenTelemetry Process Context specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4719-process-ctx.md) for C and C++.
 
 ## What is it?
 

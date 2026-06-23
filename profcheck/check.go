@@ -146,6 +146,9 @@ func (c ConformanceChecker) checkSample(s *profiles.Sample, startUnixNano uint64
 		}
 		shape = SampleShapeBoth
 	} else if hasValues {
+		if len(s.Values) != 1 {
+			errs = errors.Join(errs, fmt.Errorf("values (len=%d) must contain a single element if timestamps_unix_nano is not set", len(s.Values)))
+		}
 		shape = SampleShapeValuesOnly
 	} else if hasTimestamps {
 		shape = SampleShapeTimestampsOnly
@@ -341,22 +344,22 @@ func (c ConformanceChecker) checkStringTable(strTable []string) error {
 		return fmt.Errorf("must have empty string at index 0, got %q", strTable[0])
 	}
 	var errs error
-	strIdxs := map[string]int{}
-	for idx, s := range strTable {
-		if origIdx, ok := strIdxs[s]; ok {
-			if c.CheckDictionaryDuplicates {
+	if c.CheckDictionaryDuplicates {
+		strIdxs := map[string]int{}
+		for idx, s := range strTable {
+			if origIdx, ok := strIdxs[s]; ok {
 				errs = errors.Join(errs, fmt.Errorf("duplicate string at index %d, orig index %d: %s", idx, origIdx, s))
+				continue
 			}
-			continue
+			strIdxs[s] = idx
 		}
-		strIdxs[s] = idx
 	}
 	return errs
 }
 
 func (c ConformanceChecker) checkAttributeTable(attrTable []*profiles.KeyValueAndUnit, lenStrTable int) error {
 	var errs error
-	if err := checkZeroVal(attrTable); err != nil {
+	if err := checkAttributeTableZeroVal(attrTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
 	for pos, kvu := range attrTable {
@@ -370,6 +373,25 @@ func (c ConformanceChecker) checkAttributeTable(attrTable []*profiles.KeyValueAn
 	// TODO: Add optional uniqueness check.
 	// TODO: Add optional unreferenced entries check.
 	return errs
+}
+
+// checkAttributeTableZeroVal verifies that the AttributeTable meets Profiles
+// dictionary conventions: the slice is not empty and the first entry has zero
+// key and unit indices and the value field holds nil as value.
+func checkAttributeTableZeroVal(attrTable []*profiles.KeyValueAndUnit) error {
+	if len(attrTable) == 0 {
+		return errors.New("empty table, must have at least zero value entry")
+	}
+	first := attrTable[0]
+	if first.KeyStrindex != 0 || first.UnitStrindex != 0 {
+		return fmt.Errorf("first attribute must have zero key/unit indices, got KeyStrindex=%d, UnitStrindex=%d",
+			first.KeyStrindex, first.UnitStrindex)
+	}
+	value := first.GetValue()
+	if value != nil && value.Value != nil {
+		return fmt.Errorf("first attribute value must be nil, got %v", value)
+	}
+	return nil
 }
 
 func (c ConformanceChecker) checkStackTable(stackTable []*profiles.Stack, lenLocTable int) error {

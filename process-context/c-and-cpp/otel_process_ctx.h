@@ -3,10 +3,10 @@
 
 #pragma once
 
-#define OTEL_PROCESS_CTX_VERSION_MAJOR 0
-#define OTEL_PROCESS_CTX_VERSION_MINOR 1
+#define OTEL_PROCESS_CTX_VERSION_MAJOR 1
+#define OTEL_PROCESS_CTX_VERSION_MINOR 0
 #define OTEL_PROCESS_CTX_VERSION_PATCH 0
-#define OTEL_PROCESS_CTX_VERSION_STRING "0.1.0"
+#define OTEL_PROCESS_CTX_VERSION_STRING "1.0.0"
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,7 +19,7 @@ extern "C" {
  *
  * `otel_process_ctx.h` and `otel_process_ctx.c` provide a reference implementation for the OpenTelemetry
  * process-level context sharing specification.
- * (https://github.com/open-telemetry/opentelemetry-specification/pull/4719/)
+ * (https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4719-process-ctx.md)
  *
  * This reference implementation is Linux-only, as the specification currently only covers Linux.
  * On non-Linux OS's (or when OTEL_PROCESS_CTX_NOOP is defined) no-op versions of functions are supplied.
@@ -27,7 +27,7 @@ extern "C" {
 
  /**
  * Config for the experimental thread context sharing mechanism, see
- * https://docs.google.com/document/d/1eatbHpEXXhWZEPrXZpfR58-5RIx-81mUgF69Zpn3Rz4/edit?tab=t.bmgoq3yor67o for usage
+ * https://github.com/open-telemetry/opentelemetry-specification/pull/4947 for usage
  * details.
  */
 typedef struct {

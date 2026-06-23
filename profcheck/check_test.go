@@ -297,6 +297,22 @@ func TestCheckConformance(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			desc: "sample with multiple values",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							Samples: []*profiles.Sample{{
+								Values: []int64{1, 2, 3},
+							}},
+						}},
+					}},
+				}},
+			},
+			wantErr: "must contain a single element if timestamps_unix_nano is not set",
+		},
+		{
 			desc: "sample with timestamps only",
 			data: &profiles.ProfilesData{
 				Dictionary: zeroDictionary,
