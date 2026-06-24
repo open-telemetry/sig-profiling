@@ -258,7 +258,7 @@ func TestCheckConformance(t *testing.T) {
 			}},
 		},
 		checkSampleShapes: true,
-		wantErr: "",
+		wantErr:           "",
 	}, {
 		desc: "sample with values and timestamps matching",
 		data: &profiles.ProfilesData{
@@ -277,7 +277,7 @@ func TestCheckConformance(t *testing.T) {
 			}},
 		},
 		checkSampleShapes: true,
-		wantErr: "",
+		wantErr:           "",
 	}, {
 		desc: "mixed sample types",
 		data: &profiles.ProfilesData{
@@ -289,6 +289,28 @@ func TestCheckConformance(t *testing.T) {
 						DurationNano: 10,
 						Samples: []*profiles.Sample{{
 							Values: []int64{1},
+						}, {
+							TimestampsUnixNano: []uint64{100},
+						}},
+					}},
+				}},
+			}},
+		},
+		checkSampleShapes: true,
+		wantErr:           "does not match expected sample shape",
+	}, {
+		desc: "mixed sample types without values",
+		data: &profiles.ProfilesData{
+			Dictionary: zeroDictionary,
+			ResourceProfiles: []*profiles.ResourceProfiles{{
+				ScopeProfiles: []*profiles.ScopeProfiles{{
+					Profiles: []*profiles.Profile{{
+						TimeUnixNano: 100,
+						DurationNano: 10,
+						Samples: []*profiles.Sample{{
+							Values: []int64{1},
+						}, {
+							// Sample without Values and/or Timestamps
 						}, {
 							TimestampsUnixNano: []uint64{100},
 						}},
