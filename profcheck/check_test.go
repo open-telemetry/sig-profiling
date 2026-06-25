@@ -32,6 +32,7 @@ func TestCheckConformance(t *testing.T) {
 		data              *profiles.ProfilesData
 		disableDupesCheck bool
 		checkSampleShapes bool
+		checkReferences   bool
 		wantErr           string
 	}{{
 		desc:    "no profiles",
@@ -355,9 +356,163 @@ func TestCheckConformance(t *testing.T) {
 		},
 		checkSampleShapes: false,
 		wantErr:           "",
+	}, {
+		desc: "references check: minimal valid (all zero sentinels)",
+		data: &profiles.ProfilesData{
+			Dictionary: zeroDictionary,
+			ResourceProfiles: []*profiles.ResourceProfiles{{
+				ScopeProfiles: []*profiles.ScopeProfiles{{
+					Profiles: []*profiles.Profile{{}},
+				}},
+			}},
+		},
+		checkReferences: true,
+		wantErr:         "",
+	}, {
+		desc: "references check: unreferenced string",
+		data: &profiles.ProfilesData{
+			Dictionary: &profiles.ProfilesDictionary{
+				MappingTable:   []*profiles.Mapping{{}},
+				LocationTable:  []*profiles.Location{{}},
+				FunctionTable:  []*profiles.Function{{}},
+				LinkTable:      []*profiles.Link{{}},
+				StringTable:    []string{"", "unreferenced"},
+				AttributeTable: []*profiles.KeyValueAndUnit{{}},
+				StackTable:     []*profiles.Stack{{}},
+			},
+			ResourceProfiles: []*profiles.ResourceProfiles{{
+				ScopeProfiles: []*profiles.ScopeProfiles{{
+					Profiles: []*profiles.Profile{{}},
+				}},
+			}},
+		},
+		checkReferences: true,
+		wantErr:         "string_table: unreferenced entry at index 1",
+	}, {
+		desc: "references check: unreferenced string (disabled check)",
+		data: &profiles.ProfilesData{
+			Dictionary: &profiles.ProfilesDictionary{
+				MappingTable:   []*profiles.Mapping{{}},
+				LocationTable:  []*profiles.Location{{}},
+				FunctionTable:  []*profiles.Function{{}},
+				LinkTable:      []*profiles.Link{{}},
+				StringTable:    []string{"", "unreferenced"},
+				AttributeTable: []*profiles.KeyValueAndUnit{{}},
+				StackTable:     []*profiles.Stack{{}},
+			},
+			ResourceProfiles: []*profiles.ResourceProfiles{{
+				ScopeProfiles: []*profiles.ScopeProfiles{{
+					Profiles: []*profiles.Profile{{}},
+				}},
+			}},
+		},
+		checkReferences: false,
+		wantErr:         "",
+	}, {
+		desc: "references check: unreferenced mapping",
+		data: &profiles.ProfilesData{
+			Dictionary: &profiles.ProfilesDictionary{
+				MappingTable:   []*profiles.Mapping{{}, {}},
+				LocationTable:  []*profiles.Location{{}},
+				FunctionTable:  []*profiles.Function{{}},
+				LinkTable:      []*profiles.Link{{}},
+				StringTable:    []string{""},
+				AttributeTable: []*profiles.KeyValueAndUnit{{}},
+				StackTable:     []*profiles.Stack{{}},
+			},
+			ResourceProfiles: []*profiles.ResourceProfiles{{
+				ScopeProfiles: []*profiles.ScopeProfiles{{
+					Profiles: []*profiles.Profile{{}},
+				}},
+			}},
+		},
+		checkReferences: true,
+		wantErr:         "mapping_table: unreferenced entry at index 1",
+	}, {
+		desc: "references check: unreferenced stack",
+		data: &profiles.ProfilesData{
+			Dictionary: &profiles.ProfilesDictionary{
+				MappingTable:   []*profiles.Mapping{{}},
+				LocationTable:  []*profiles.Location{{}},
+				FunctionTable:  []*profiles.Function{{}},
+				LinkTable:      []*profiles.Link{{}},
+				StringTable:    []string{""},
+				AttributeTable: []*profiles.KeyValueAndUnit{{}},
+				StackTable:     []*profiles.Stack{{}, {}},
+			},
+			ResourceProfiles: []*profiles.ResourceProfiles{{
+				ScopeProfiles: []*profiles.ScopeProfiles{{
+					Profiles: []*profiles.Profile{{}},
+				}},
+			}},
+		},
+		checkReferences: true,
+		wantErr:         "stack_table: unreferenced entry at index 1",
+	}, {
+		desc: "references check: unreferenced link",
+		data: &profiles.ProfilesData{
+			Dictionary: &profiles.ProfilesDictionary{
+				MappingTable:   []*profiles.Mapping{{}},
+				LocationTable:  []*profiles.Location{{}},
+				FunctionTable:  []*profiles.Function{{}},
+				LinkTable:      []*profiles.Link{{}, {TraceId: make([]byte, 16), SpanId: make([]byte, 8)}},
+				StringTable:    []string{""},
+				AttributeTable: []*profiles.KeyValueAndUnit{{}},
+				StackTable:     []*profiles.Stack{{}},
+			},
+			ResourceProfiles: []*profiles.ResourceProfiles{{
+				ScopeProfiles: []*profiles.ScopeProfiles{{
+					Profiles: []*profiles.Profile{{}},
+				}},
+			}},
+		},
+		checkReferences: true,
+		wantErr:         "link_table: unreferenced entry at index 1",
+	}, {
+		desc: "references check: fully referenced non-zero entries",
+		data: &profiles.ProfilesData{
+			Dictionary: &profiles.ProfilesDictionary{
+				StringTable: []string{"", "fn_name", "fn_sysname", "fn_file", "map_file", "type", "unit"},
+				AttributeTable: []*profiles.KeyValueAndUnit{
+					{},
+					{KeyStrindex: 1, UnitStrindex: 0, Value: makeAnyValue("v1")},
+				},
+				MappingTable: []*profiles.Mapping{
+					{},
+					{FilenameStrindex: 4},
+				},
+				FunctionTable: []*profiles.Function{
+					{},
+					{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3},
+				},
+				LocationTable: []*profiles.Location{
+					{},
+					{MappingIndex: 1, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+				},
+				StackTable: []*profiles.Stack{
+					{},
+					{LocationIndices: []int32{1}},
+				},
+				LinkTable: []*profiles.Link{{}},
+			},
+			ResourceProfiles: []*profiles.ResourceProfiles{{
+				ScopeProfiles: []*profiles.ScopeProfiles{{
+					Profiles: []*profiles.Profile{{
+						SampleType: &profiles.ValueType{TypeStrindex: 5, UnitStrindex: 6},
+						Samples: []*profiles.Sample{{
+							StackIndex:       1,
+							AttributeIndices: []int32{1},
+							Values:           []int64{42},
+						}},
+					}},
+				}},
+			}},
+		},
+		checkReferences: true,
+		wantErr:         "",
 	}} {
 		t.Run(tc.desc, func(t *testing.T) {
-			c := ConformanceChecker{CheckDictionaryDuplicates: !tc.disableDupesCheck, CheckSampleTimestampShape: tc.checkSampleShapes}
+			c := ConformanceChecker{CheckDictionaryDuplicates: !tc.disableDupesCheck, CheckSampleTimestampShape: tc.checkSampleShapes, CheckReferences: tc.checkReferences}
 			err := c.Check(tc.data)
 			switch {
 			case tc.wantErr == "" && err != nil:
