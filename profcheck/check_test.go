@@ -255,7 +255,8 @@ func TestCheckConformance(t *testing.T) {
 				}},
 			}},
 		},
-		wantErr: "must contain a single element if timestamps_unix_nano is not set",
+		checkSampleShapes: true,
+		wantErr:           "must contain a single element if timestamps_unix_nano is not set",
 	}, {
 		desc: "sample with timestamps only",
 		data: &profiles.ProfilesData{
