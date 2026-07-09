@@ -112,6 +112,7 @@ const (
 	SampleShapeValuesOnly                 // Values only, no timestamps
 	SampleShapeTimestampsOnly             // Timestamps only, no explicit values.
 	SampleShapeBoth                       // Both timestamps and values, as parallel arrays.
+	SampleShapeInvalid                    // Unrecognized sample shape
 )
 
 func (s SampleShape) String() string {
@@ -144,6 +145,10 @@ func (c ConformanceChecker) checkSample(s *profiles.Sample, startUnixNano uint64
 		}
 	}
 
+	if !c.CheckSampleTimestampShape {
+		return errs
+	}
+
 	var shape SampleShape
 	if hasValues, hasTimestamps := len(s.Values) > 0, len(s.TimestampsUnixNano) > 0; hasValues && hasTimestamps {
 		if len(s.Values) != len(s.TimestampsUnixNano) {
@@ -151,20 +156,23 @@ func (c ConformanceChecker) checkSample(s *profiles.Sample, startUnixNano uint64
 		}
 		shape = SampleShapeBoth
 	} else if hasValues {
+		if len(s.Values) != 1 {
+			errs = errors.Join(errs, fmt.Errorf("values (len=%d) must contain a single element if timestamps_unix_nano is not set", len(s.Values)))
+		}
 		shape = SampleShapeValuesOnly
 	} else if hasTimestamps {
 		shape = SampleShapeTimestampsOnly
 	} else {
 		errs = errors.Join(errs, errors.New("sample must have at least one values or timestamps_unix_nano entry"))
-		shape = SampleShapeUnspecified
+		shape = SampleShapeInvalid
 	}
-	if c.CheckSampleTimestampShape && shape != SampleShapeUnspecified {
-		if *expectedShape == SampleShapeUnspecified {
-			*expectedShape = shape
-		} else if shape != *expectedShape {
-			errs = errors.Join(errs, fmt.Errorf("sample shape %s does not match expected sample shape %s", shape, expectedShape))
-		}
+
+	if *expectedShape == SampleShapeUnspecified {
+		*expectedShape = shape
+	} else if shape != *expectedShape {
+		errs = errors.Join(errs, fmt.Errorf("sample shape %s does not match expected sample shape %s", shape, expectedShape))
 	}
+
 	return errs
 }
 
