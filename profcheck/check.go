@@ -483,11 +483,6 @@ func prefixErrorf(err error, format string, args ...any) error {
 
 // asSortedString takes a slice, sorts it and returns a string.
 func asSortedString(input []int32) string {
-	if len(input) == 0 {
-		return ""
-	}
-
 	slices.Sort(input)
-
 	return fmt.Sprint(input)
 }
