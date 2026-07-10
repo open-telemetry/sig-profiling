@@ -28,9 +28,9 @@ import (
 )
 
 var (
-	checkDupes        = flag.Bool("check-dupes", false, "Enable check for duplicates in the dictionary")
-	checkSampleShapes = flag.Bool("check-sample-shapes", true, "Enable check for sample shapes")
-	checkReferences   = flag.Bool("check-references", true, "Enable check for reference check")
+	checkDupes             = flag.Bool("check-dupes", false, "Enable check for duplicates in the dictionary")
+	checkSampleShapes      = flag.Bool("check-sample-shapes", true, "Enable check for sample shapes")
+	checkDictionaryOrphans = flag.Bool("check-references", true, "Enable check for reference check")
 )
 
 func main() {
@@ -58,7 +58,7 @@ func main() {
 	if err := (profcheck.ConformanceChecker{
 		CheckDictionaryDuplicates: *checkDupes,
 		CheckSampleTimestampShape: *checkSampleShapes,
-		CheckReferences:           *checkReferences,
+		CheckReferences:           *checkDictionaryOrphans,
 	}).Check(&data); err != nil {
 		fmt.Printf("%s: conformance checks failed: %v\n", inputPath, err)
 		os.Exit(1)

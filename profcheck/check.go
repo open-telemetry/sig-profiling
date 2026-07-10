@@ -47,7 +47,7 @@ func (c ConformanceChecker) Check(data *profiles.ProfilesData) error {
 		errs = errors.Join(errs, prefixErrorf(err, "dictionary"))
 	}
 	if c.CheckReferences {
-		if err := c.checkReferences(data); err != nil {
+		if err := c.checkDictionaryOrphans(data); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "dictionary"))
 		}
 	}
@@ -406,9 +406,9 @@ func checkZeroVal[T any, P interface {
 	return nil
 }
 
-// checkReferences verifies that every entry in every table of the dictionary
-// is referenced.
-func (c ConformanceChecker) checkReferences(data *profiles.ProfilesData) error {
+// checkDictionaryOrphans verifies that every entry in every table of the
+// dictionary is referenced.
+func (c ConformanceChecker) checkDictionaryOrphans(data *profiles.ProfilesData) error {
 	dict := data.Dictionary
 
 	strRefs := make(map[int32]bool)
