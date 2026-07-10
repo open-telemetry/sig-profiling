@@ -259,7 +259,8 @@ func TestCheckConformance(t *testing.T) {
 					}},
 				}},
 			},
-			wantErr: "sample must have at least one values or timestamps_unix_nano entry",
+			checkSampleShapes: true,
+			wantErr:           "sample must have at least one values or timestamps_unix_nano entry",
 		},
 		{
 			desc: "sample with values and timestamps length mismatch",
@@ -278,7 +279,8 @@ func TestCheckConformance(t *testing.T) {
 					}},
 				}},
 			},
-			wantErr: "values (len=1) and timestamps_unix_nano (len=2) must contain the same number of elements",
+			checkSampleShapes: true,
+			wantErr:           "values (len=1) and timestamps_unix_nano (len=2) must contain the same number of elements",
 		},
 		{
 			desc: "sample with values only",
@@ -294,7 +296,8 @@ func TestCheckConformance(t *testing.T) {
 					}},
 				}},
 			},
-			wantErr: "",
+			checkSampleShapes: true,
+			wantErr:           "",
 		},
 		{
 			desc: "sample with multiple values",
@@ -310,7 +313,8 @@ func TestCheckConformance(t *testing.T) {
 					}},
 				}},
 			},
-			wantErr: "must contain a single element if timestamps_unix_nano is not set",
+			checkSampleShapes: true,
+			wantErr:           "must contain a single element if timestamps_unix_nano is not set",
 		},
 		{
 			desc: "sample with timestamps only",
@@ -328,7 +332,8 @@ func TestCheckConformance(t *testing.T) {
 					}},
 				}},
 			},
-			wantErr: "",
+			checkSampleShapes: true,
+			wantErr:           "",
 		},
 		{
 			desc: "sample with values and timestamps matching",
@@ -347,7 +352,8 @@ func TestCheckConformance(t *testing.T) {
 					}},
 				}},
 			},
-			wantErr: "",
+			checkSampleShapes: true,
+			wantErr:           "",
 		},
 		{
 			desc: "mixed sample types",
@@ -360,6 +366,29 @@ func TestCheckConformance(t *testing.T) {
 							DurationNano: 10,
 							Samples: []*profiles.Sample{{
 								Values: []int64{1},
+							}, {
+								TimestampsUnixNano: []uint64{100},
+							}},
+						}},
+					}},
+				}},
+			},
+			checkSampleShapes: true,
+			wantErr:           "does not match expected sample shape",
+		},
+		{
+			desc: "mixed sample types without values",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							TimeUnixNano: 100,
+							DurationNano: 10,
+							Samples: []*profiles.Sample{{
+								Values: []int64{1},
+							}, {
+								// Sample without Values and/or Timestamps
 							}, {
 								TimestampsUnixNano: []uint64{100},
 							}},
