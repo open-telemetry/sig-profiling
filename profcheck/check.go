@@ -29,7 +29,7 @@ import (
 type ConformanceChecker struct {
 	CheckDictionaryDuplicates bool
 	CheckSampleTimestampShape bool
-	CheckReferences           bool
+	CheckDictionaryOrphans    bool
 }
 
 func (c ConformanceChecker) Check(data *profiles.ProfilesData) error {
@@ -46,7 +46,7 @@ func (c ConformanceChecker) Check(data *profiles.ProfilesData) error {
 	if err := c.checkDictionary(dict); err != nil {
 		errs = errors.Join(errs, prefixErrorf(err, "dictionary"))
 	}
-	if c.CheckReferences {
+	if c.CheckDictionaryOrphans {
 		if err := c.checkDictionaryOrphans(data); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "dictionary"))
 		}
