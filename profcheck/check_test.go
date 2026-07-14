@@ -513,7 +513,7 @@ func TestCheckConformance(t *testing.T) {
 		wantErr:         "",
 	}} {
 		t.Run(tc.desc, func(t *testing.T) {
-			c := ConformanceChecker{CheckDictionaryDuplicates: !tc.disableDupesCheck, CheckSampleTimestampShape: tc.checkSampleShapes, CheckReferences: tc.checkReferences}
+			c := ConformanceChecker{CheckDictionaryDuplicates: !tc.disableDupesCheck, CheckSampleTimestampShape: tc.checkSampleShapes, CheckDictionaryOrphans: tc.checkReferences}
 			err := c.Check(tc.data)
 			switch {
 			case tc.wantErr == "" && err != nil:
