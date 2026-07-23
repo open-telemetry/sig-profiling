@@ -6,5 +6,7 @@ go.opentelemetry.io/proto/otlp v1.11.0 h1:5rrYs0Ykyj50sdU/JU0x8etU+LubXWb+gED6Tb
 go.opentelemetry.io/proto/otlp v1.11.0/go.mod h1:SmVizdCOAm3XBtG1g1NnOdhW6jtddT72hLMhv8VwA8E=
 go.opentelemetry.io/proto/otlp/profiles/v1development v0.3.0 h1:ZQs05qo3Yh4KUHeVH6v89xErwmsvgA/cLX2/w5Ikp+k=
 go.opentelemetry.io/proto/otlp/profiles/v1development v0.3.0/go.mod h1:3iiRVKaCfVo0UI1ZaSMm5WbCBbINRqVlD9SUmvyBNrY=
+go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.0 h1:K8fVW1jW1xn4iKqvoUED5jDQhlJcYhQ1houjU8clQp0=
+go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.0/go.mod h1:pD9EreXXWprVGOuyN/YOTap/X0bKu0Za4yVOiW55/ic=
 google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
 google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
