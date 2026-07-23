@@ -30,8 +30,12 @@ go.opentelemetry.io/proto/otlp v1.11.0 h1:5rrYs0Ykyj50sdU/JU0x8etU+LubXWb+gED6Tb
 go.opentelemetry.io/proto/otlp v1.11.0/go.mod h1:SmVizdCOAm3XBtG1g1NnOdhW6jtddT72hLMhv8VwA8E=
 go.opentelemetry.io/proto/otlp/collector/profiles/v1development v0.3.0 h1:AWBLtJn3ajH399gyOuJdqPsC9w152x3xGVVO/UK3vyM=
 go.opentelemetry.io/proto/otlp/collector/profiles/v1development v0.3.0/go.mod h1:kCdbxyM9kfmv3v4ZQzZ2pACxoQ6lE0IsjP+UcZwQnr4=
+go.opentelemetry.io/proto/otlp/collector/profiles/v1development v0.4.0 h1:bJQIZnyUB2qsRnbQBO0q5BSym96WCGEv48q2ATLI4b0=
+go.opentelemetry.io/proto/otlp/collector/profiles/v1development v0.4.0/go.mod h1:fdbY5aZcJlGPp9LnmKOhyHm3IXwu8l5hQT5gcuTtSGY=
 go.opentelemetry.io/proto/otlp/profiles/v1development v0.3.0 h1:ZQs05qo3Yh4KUHeVH6v89xErwmsvgA/cLX2/w5Ikp+k=
 go.opentelemetry.io/proto/otlp/profiles/v1development v0.3.0/go.mod h1:3iiRVKaCfVo0UI1ZaSMm5WbCBbINRqVlD9SUmvyBNrY=
+go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.0 h1:K8fVW1jW1xn4iKqvoUED5jDQhlJcYhQ1houjU8clQp0=
+go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.0/go.mod h1:pD9EreXXWprVGOuyN/YOTap/X0bKu0Za4yVOiW55/ic=
 golang.org/x/net v0.54.0 h1:2zJIZAxAHV/OHCDTCOHAYehQzLfSXuf/5SoL/Dv6w/w=
 golang.org/x/net v0.54.0/go.mod h1:Sj4oj8jK6XmHpBZU/zWHw3BV3abl4Kvi+Ut7cQcY+cQ=
 golang.org/x/net v0.57.0 h1:K5+3DljvIuDG9/Jv9rvyMywYNFCQ9RSUY6OOTTkT+tE=
