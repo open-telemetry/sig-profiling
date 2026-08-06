@@ -392,15 +392,33 @@ func (c ConformanceChecker) checkLinkTable(linkTable []*profiles.Link) error {
 	if err := checkZeroVal(linkTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
+
+	type uniqLink struct {
+		traceID [16]byte
+		spanID  [8]byte
+	}
+	uniqLinks := make(map[uniqLink]struct{})
+
 	for idx, link := range linkTable[1:] {
-		if gotLen, wantLen := len(link.TraceId), 16; gotLen != wantLen {
-			errs = errors.Join(errs, fmt.Errorf("len([%d].trace_id) == %d, want %d", idx, gotLen, wantLen))
+		validTraceID := len(link.TraceId) == 16
+		validSpanID := len(link.SpanId) == 8
+		if !validTraceID {
+			errs = errors.Join(errs, fmt.Errorf("len([%d].trace_id) == %d, want %d", idx, len(link.TraceId), 16))
 		}
-		if gotLen, wantLen := len(link.SpanId), 8; gotLen != wantLen {
-			errs = errors.Join(errs, fmt.Errorf("len([%d].span_id) == %d, want %d", idx, gotLen, wantLen))
+		if !validSpanID {
+			errs = errors.Join(errs, fmt.Errorf("len([%d].span_id) == %d, want %d", idx, len(link.SpanId), 8))
+		}
+		if c.CheckDictionaryDuplicates && validTraceID && validSpanID {
+			var newLink uniqLink
+			copy(newLink.traceID[:], link.TraceId)
+			copy(newLink.spanID[:], link.SpanId)
+			if _, exists := uniqLinks[newLink]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate link at index %d: trace_id=%x span_id=%x", idx, link.TraceId, link.SpanId))
+				continue
+			}
+			uniqLinks[newLink] = struct{}{}
 		}
 	}
-	// TODO: Add optional uniqueness check.
 	return errs
 }
 

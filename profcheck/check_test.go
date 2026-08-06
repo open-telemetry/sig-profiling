@@ -288,6 +288,55 @@ func TestCheckConformance(t *testing.T) {
 			wantErr:           "",
 		},
 		{
+			desc: "duplicate link",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable: []*profiles.Link{
+						{},
+						{TraceId: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}},
+						{TraceId: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}},
+					},
+					StringTable:    []string{""},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate link",
+		},
+		{
+			desc: "duplicate link (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable: []*profiles.Link{
+						{},
+						{TraceId: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}},
+						{TraceId: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}},
+					},
+					StringTable:    []string{""},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
 			desc: "duplicate string (disabled check)",
 			data: &profiles.ProfilesData{
 				Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
