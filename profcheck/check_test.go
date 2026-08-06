@@ -239,6 +239,55 @@ func TestCheckConformance(t *testing.T) {
 			wantErr:           "",
 		},
 		{
+			desc: "duplicate location",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}, {FilenameStrindex: 1}},
+					LocationTable: []*profiles.Location{
+						{},
+						{MappingIndex: 1, Address: 0x1234, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+						{MappingIndex: 1, Address: 0x1234, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+					},
+					FunctionTable:  []*profiles.Function{{}, {NameStrindex: 2}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "map_file", "fn_name"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate location",
+		},
+		{
+			desc: "duplicate location (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}, {FilenameStrindex: 1}},
+					LocationTable: []*profiles.Location{
+						{},
+						{MappingIndex: 1, Address: 0x1234, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+						{MappingIndex: 1, Address: 0x1234, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+					},
+					FunctionTable:  []*profiles.Function{{}, {NameStrindex: 2}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "map_file", "fn_name"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
 			desc: "duplicate string (disabled check)",
 			data: &profiles.ProfilesData{
 				Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
