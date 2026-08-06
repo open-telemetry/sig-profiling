@@ -279,8 +279,15 @@ func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, di
 		line          int64
 		column        int64
 	}
+	type uniqLocation struct {
+		mappingIndex int32
+		address      uint64
+		attrIdxs     string
+		lines        string
+	}
+	uniqLocations := make(map[uniqLocation]struct{})
 
-	for locIdx, loc := range locTable {
+	for locIdx, loc := range locTable[1:] {
 		if err := c.checkIndex(len(dict.MappingTable), loc.MappingIndex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].mapping_index", locIdx))
 		}
@@ -305,8 +312,20 @@ func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, di
 				uniqLines[newLine] = struct{}{}
 			}
 		}
+		if c.CheckDictionaryDuplicates {
+			newLocation := uniqLocation{
+				mappingIndex: loc.MappingIndex,
+				address:      loc.Address,
+				attrIdxs:     asSortedString(loc.AttributeIndices),
+				lines:        asLinesString(loc.Lines),
+			}
+			if _, exists := uniqLocations[newLocation]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate location at index %d: %#v", locIdx, newLocation))
+				continue
+			}
+			uniqLocations[newLocation] = struct{}{}
+		}
 	}
-	// TODO: Add optional uniqueness check.
 	return errs
 }
 
@@ -650,4 +669,14 @@ func prefixErrorf(err error, format string, args ...any) error {
 func asSortedString(input []int32) string {
 	slices.Sort(input)
 	return fmt.Sprint(input)
+}
+
+// asLinesString serializes a Lines slice to a string preserving order,
+// since lines represent an ordered inlined call chain.
+func asLinesString(lines []*profiles.Line) string {
+	tuples := make([][3]int64, len(lines))
+	for i, l := range lines {
+		tuples[i] = [3]int64{int64(l.FunctionIndex), l.Line, l.Column}
+	}
+	return fmt.Sprint(tuples)
 }
