@@ -273,6 +273,13 @@ func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, di
 	if err := checkZeroVal(locTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
+
+	type uniqLine struct {
+		functionIndex int32
+		line          int64
+		column        int64
+	}
+
 	for locIdx, loc := range locTable {
 		if err := c.checkIndex(len(dict.MappingTable), loc.MappingIndex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].mapping_index", locIdx))
@@ -280,9 +287,22 @@ func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, di
 		if err := c.checkAttributeIndices(loc.AttributeIndices, dict); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].attribute_indices", locIdx))
 		}
+		uniqLines := make(map[uniqLine]struct{})
 		for lineIdx, line := range loc.Lines {
 			if err := c.checkLine(line, dict); err != nil {
 				errs = errors.Join(errs, prefixErrorf(err, "[%d].line[%d]", locIdx, lineIdx))
+			}
+			if c.CheckDictionaryDuplicates {
+				newLine := uniqLine{
+					functionIndex: line.FunctionIndex,
+					line:          line.Line,
+					column:        line.Column,
+				}
+				if _, exists := uniqLines[newLine]; exists {
+					errs = errors.Join(errs, fmt.Errorf("[%d].line[%d]: duplicate line: %#v", locIdx, lineIdx, newLine))
+					continue
+				}
+				uniqLines[newLine] = struct{}{}
 			}
 		}
 	}

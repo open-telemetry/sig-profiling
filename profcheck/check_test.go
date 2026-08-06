@@ -186,6 +186,59 @@ func TestCheckConformance(t *testing.T) {
 			wantErr:           "",
 		},
 		{
+			desc: "duplicate line",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{
+						{},
+						{Lines: []*profiles.Line{
+							{FunctionIndex: 1, Line: 10, Column: 5},
+							{FunctionIndex: 1, Line: 10, Column: 5},
+						}},
+					},
+					FunctionTable:  []*profiles.Function{{}, {NameStrindex: 1}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "fn_name"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate line",
+		},
+		{
+			desc: "duplicate line (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{
+						{},
+						{Lines: []*profiles.Line{
+							{FunctionIndex: 1, Line: 10, Column: 5},
+							{FunctionIndex: 1, Line: 10, Column: 5},
+						}},
+					},
+					FunctionTable:  []*profiles.Function{{}, {NameStrindex: 1}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "fn_name"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
 			desc: "duplicate string (disabled check)",
 			data: &profiles.ProfilesData{
 				Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
