@@ -137,6 +137,55 @@ func TestCheckConformance(t *testing.T) {
 			wantErr: "duplicate mapping",
 		},
 		{
+			desc: "duplicate function",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{
+						{},
+						{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3, StartLine: 10},
+						{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3, StartLine: 10},
+					},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "fn_name", "fn_sysname", "fn_file"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate function",
+		},
+		{
+			desc: "duplicate function (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{
+						{},
+						{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3, StartLine: 10},
+						{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3, StartLine: 10},
+					},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "fn_name", "fn_sysname", "fn_file"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
 			desc: "duplicate string (disabled check)",
 			data: &profiles.ProfilesData{
 				Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
