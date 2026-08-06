@@ -309,7 +309,16 @@ func (c ConformanceChecker) checkFunctionTable(funcTable []*profiles.Function, d
 	if err := checkZeroVal(funcTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
-	for idx, fnc := range funcTable {
+
+	type uniqFunction struct {
+		nameStrIdx       int32
+		systemNameStrIdx int32
+		filenameStrIdx   int32
+		startLine        int64
+	}
+	uniqFunctions := make(map[uniqFunction]struct{})
+
+	for idx, fnc := range funcTable[1:] {
 		if err := c.checkIndex(len(dict.StringTable), fnc.NameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].name_strindex", idx))
 		}
@@ -322,8 +331,20 @@ func (c ConformanceChecker) checkFunctionTable(funcTable []*profiles.Function, d
 		if err := c.checkNonNegative(fnc.StartLine); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].start_line", idx))
 		}
+		if c.CheckDictionaryDuplicates {
+			newFunction := uniqFunction{
+				nameStrIdx:       fnc.NameStrindex,
+				systemNameStrIdx: fnc.SystemNameStrindex,
+				filenameStrIdx:   fnc.FilenameStrindex,
+				startLine:        fnc.StartLine,
+			}
+			if _, exists := uniqFunctions[newFunction]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate function at index %d: %#v", idx, newFunction))
+				continue
+			}
+			uniqFunctions[newFunction] = struct{}{}
+		}
 	}
-	// TODO: Add optional uniqueness check.
 	return errs
 }
 
