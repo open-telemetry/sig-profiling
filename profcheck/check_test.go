@@ -137,6 +137,206 @@ func TestCheckConformance(t *testing.T) {
 			wantErr: "duplicate mapping",
 		},
 		{
+			desc: "duplicate function",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{
+						{},
+						{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3, StartLine: 10},
+						{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3, StartLine: 10},
+					},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "fn_name", "fn_sysname", "fn_file"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate function",
+		},
+		{
+			desc: "duplicate function (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{
+						{},
+						{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3, StartLine: 10},
+						{NameStrindex: 1, SystemNameStrindex: 2, FilenameStrindex: 3, StartLine: 10},
+					},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "fn_name", "fn_sysname", "fn_file"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
+			desc: "duplicate line",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{
+						{},
+						{Lines: []*profiles.Line{
+							{FunctionIndex: 1, Line: 10, Column: 5},
+							{FunctionIndex: 1, Line: 10, Column: 5},
+						}},
+					},
+					FunctionTable:  []*profiles.Function{{}, {NameStrindex: 1}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "fn_name"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate line",
+		},
+		{
+			desc: "duplicate line (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{
+						{},
+						{Lines: []*profiles.Line{
+							{FunctionIndex: 1, Line: 10, Column: 5},
+							{FunctionIndex: 1, Line: 10, Column: 5},
+						}},
+					},
+					FunctionTable:  []*profiles.Function{{}, {NameStrindex: 1}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "fn_name"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
+			desc: "duplicate location",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}, {FilenameStrindex: 1}},
+					LocationTable: []*profiles.Location{
+						{},
+						{MappingIndex: 1, Address: 0x1234, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+						{MappingIndex: 1, Address: 0x1234, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+					},
+					FunctionTable:  []*profiles.Function{{}, {NameStrindex: 2}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "map_file", "fn_name"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate location",
+		},
+		{
+			desc: "duplicate location (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{{}, {FilenameStrindex: 1}},
+					LocationTable: []*profiles.Location{
+						{},
+						{MappingIndex: 1, Address: 0x1234, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+						{MappingIndex: 1, Address: 0x1234, Lines: []*profiles.Line{{FunctionIndex: 1}}},
+					},
+					FunctionTable:  []*profiles.Function{{}, {NameStrindex: 2}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "map_file", "fn_name"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
+			desc: "duplicate link",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable: []*profiles.Link{
+						{},
+						{TraceId: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}},
+						{TraceId: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}},
+					},
+					StringTable:    []string{""},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate link",
+		},
+		{
+			desc: "duplicate link (disabled check)",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable: []*profiles.Link{
+						{},
+						{TraceId: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}},
+						{TraceId: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, SpanId: []byte{1, 2, 3, 4, 5, 6, 7, 8}},
+					},
+					StringTable:    []string{""},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			disableDupesCheck: true,
+			wantErr:           "",
+		},
+		{
 			desc: "duplicate string (disabled check)",
 			data: &profiles.ProfilesData{
 				Dictionary: zeroDictWithStringTable([]string{"", "a", "b", "a"}),
