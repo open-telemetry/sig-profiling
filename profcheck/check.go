@@ -273,20 +273,59 @@ func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, di
 	if err := checkZeroVal(locTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
-	for locIdx, loc := range locTable {
+
+	type uniqLine struct {
+		functionIndex int32
+		line          int64
+		column        int64
+	}
+	type uniqLocation struct {
+		mappingIndex int32
+		address      uint64
+		attrIdxs     string
+		lines        string
+	}
+	uniqLocations := make(map[uniqLocation]struct{})
+
+	for locIdx, loc := range locTable[1:] {
 		if err := c.checkIndex(len(dict.MappingTable), loc.MappingIndex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].mapping_index", locIdx))
 		}
 		if err := c.checkAttributeIndices(loc.AttributeIndices, dict); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].attribute_indices", locIdx))
 		}
+		uniqLines := make(map[uniqLine]struct{})
 		for lineIdx, line := range loc.Lines {
 			if err := c.checkLine(line, dict); err != nil {
 				errs = errors.Join(errs, prefixErrorf(err, "[%d].line[%d]", locIdx, lineIdx))
 			}
+			if c.CheckDictionaryDuplicates {
+				newLine := uniqLine{
+					functionIndex: line.FunctionIndex,
+					line:          line.Line,
+					column:        line.Column,
+				}
+				if _, exists := uniqLines[newLine]; exists {
+					errs = errors.Join(errs, fmt.Errorf("[%d].line[%d]: duplicate line: %#v", locIdx, lineIdx, newLine))
+					continue
+				}
+				uniqLines[newLine] = struct{}{}
+			}
+		}
+		if c.CheckDictionaryDuplicates {
+			newLocation := uniqLocation{
+				mappingIndex: loc.MappingIndex,
+				address:      loc.Address,
+				attrIdxs:     asSortedString(loc.AttributeIndices),
+				lines:        asLinesString(loc.Lines),
+			}
+			if _, exists := uniqLocations[newLocation]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate location at index %d: %#v", locIdx, newLocation))
+				continue
+			}
+			uniqLocations[newLocation] = struct{}{}
 		}
 	}
-	// TODO: Add optional uniqueness check.
 	return errs
 }
 
@@ -309,7 +348,16 @@ func (c ConformanceChecker) checkFunctionTable(funcTable []*profiles.Function, d
 	if err := checkZeroVal(funcTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
-	for idx, fnc := range funcTable {
+
+	type uniqFunction struct {
+		nameStrIdx       int32
+		systemNameStrIdx int32
+		filenameStrIdx   int32
+		startLine        int64
+	}
+	uniqFunctions := make(map[uniqFunction]struct{})
+
+	for idx, fnc := range funcTable[1:] {
 		if err := c.checkIndex(len(dict.StringTable), fnc.NameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].name_strindex", idx))
 		}
@@ -322,8 +370,20 @@ func (c ConformanceChecker) checkFunctionTable(funcTable []*profiles.Function, d
 		if err := c.checkNonNegative(fnc.StartLine); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].start_line", idx))
 		}
+		if c.CheckDictionaryDuplicates {
+			newFunction := uniqFunction{
+				nameStrIdx:       fnc.NameStrindex,
+				systemNameStrIdx: fnc.SystemNameStrindex,
+				filenameStrIdx:   fnc.FilenameStrindex,
+				startLine:        fnc.StartLine,
+			}
+			if _, exists := uniqFunctions[newFunction]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate function at index %d: %#v", idx, newFunction))
+				continue
+			}
+			uniqFunctions[newFunction] = struct{}{}
+		}
 	}
-	// TODO: Add optional uniqueness check.
 	return errs
 }
 
@@ -332,15 +392,33 @@ func (c ConformanceChecker) checkLinkTable(linkTable []*profiles.Link) error {
 	if err := checkZeroVal(linkTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
+
+	type uniqLink struct {
+		traceID [16]byte
+		spanID  [8]byte
+	}
+	uniqLinks := make(map[uniqLink]struct{})
+
 	for idx, link := range linkTable[1:] {
-		if gotLen, wantLen := len(link.TraceId), 16; gotLen != wantLen {
-			errs = errors.Join(errs, fmt.Errorf("len([%d].trace_id) == %d, want %d", idx, gotLen, wantLen))
+		validTraceID := len(link.TraceId) == 16
+		validSpanID := len(link.SpanId) == 8
+		if !validTraceID {
+			errs = errors.Join(errs, fmt.Errorf("len([%d].trace_id) == %d, want %d", idx, len(link.TraceId), 16))
 		}
-		if gotLen, wantLen := len(link.SpanId), 8; gotLen != wantLen {
-			errs = errors.Join(errs, fmt.Errorf("len([%d].span_id) == %d, want %d", idx, gotLen, wantLen))
+		if !validSpanID {
+			errs = errors.Join(errs, fmt.Errorf("len([%d].span_id) == %d, want %d", idx, len(link.SpanId), 8))
+		}
+		if c.CheckDictionaryDuplicates && validTraceID && validSpanID {
+			var newLink uniqLink
+			copy(newLink.traceID[:], link.TraceId)
+			copy(newLink.spanID[:], link.SpanId)
+			if _, exists := uniqLinks[newLink]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate link at index %d: trace_id=%x span_id=%x", idx, link.TraceId, link.SpanId))
+				continue
+			}
+			uniqLinks[newLink] = struct{}{}
 		}
 	}
-	// TODO: Add optional uniqueness check.
 	return errs
 }
 
@@ -609,4 +687,14 @@ func prefixErrorf(err error, format string, args ...any) error {
 func asSortedString(input []int32) string {
 	slices.Sort(input)
 	return fmt.Sprint(input)
+}
+
+// asLinesString serializes a Lines slice to a string preserving order,
+// since lines represent an ordered inlined call chain.
+func asLinesString(lines []*profiles.Line) string {
+	tuples := make([][3]int64, len(lines))
+	for i, l := range lines {
+		tuples[i] = [3]int64{int64(l.FunctionIndex), l.Line, l.Column}
+	}
+	return fmt.Sprint(tuples)
 }
