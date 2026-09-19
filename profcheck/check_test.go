@@ -9,6 +9,7 @@ import (
 
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
+	v1 "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
 func TestCheckConformance(t *testing.T) {
@@ -626,6 +627,34 @@ func TestCheckConformance(t *testing.T) {
 			data: &profiles.ProfilesData{
 				Dictionary: zeroDictionary,
 				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			checkReferences: true,
+			wantErr:         "",
+		},
+		{
+			desc: "references check: referenced string in resource profile",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:   []*profiles.Mapping{{}},
+					LocationTable:  []*profiles.Location{{}},
+					FunctionTable:  []*profiles.Function{{}},
+					LinkTable:      []*profiles.Link{{}},
+					StringTable:    []string{"", "container.id"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					Resource: &v1.Resource{
+						Attributes: []*common.KeyValue{
+							{
+								KeyStrindex: 1,
+							},
+						},
+					},
 					ScopeProfiles: []*profiles.ScopeProfiles{{
 						Profiles: []*profiles.Profile{{}},
 					}},

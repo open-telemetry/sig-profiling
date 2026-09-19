@@ -536,7 +536,17 @@ func (c ConformanceChecker) checkDictionaryOrphans(data *profiles.ProfilesData) 
 
 	// Collect references from all profiles.
 	for _, rp := range data.ResourceProfiles {
+		for _, rpAttr := range rp.GetResource().GetAttributes() {
+			if rpAttr.GetKey() == "" {
+				strRefs[rpAttr.GetKeyStrindex()] = true
+			}
+		}
 		for _, sp := range rp.ScopeProfiles {
+			for _, spAttr := range sp.GetScope().GetAttributes() {
+				if spAttr.GetKey() == "" {
+					strRefs[spAttr.GetKeyStrindex()] = true
+				}
+			}
 			for _, prof := range sp.Profiles {
 				strRefs[prof.GetSampleType().GetTypeStrindex()] = true
 				strRefs[prof.GetSampleType().GetUnitStrindex()] = true
