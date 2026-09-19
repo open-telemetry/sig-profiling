@@ -448,6 +448,14 @@ func (c ConformanceChecker) checkAttributeTable(attrTable []*profiles.KeyValueAn
 	if err := checkAttributeTableZeroVal(attrTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
+
+	type uniqAttr struct {
+		key   int32
+		unit  int32
+		value string
+	}
+	uniqAttrs := make(map[uniqAttr]struct{})
+
 	for pos, kvu := range attrTable {
 		if err := c.checkIndex(lenStrTable, kvu.KeyStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].key_strindex", pos))
@@ -455,8 +463,19 @@ func (c ConformanceChecker) checkAttributeTable(attrTable []*profiles.KeyValueAn
 		if err := c.checkIndex(lenStrTable, kvu.UnitStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].unit_strindex", pos))
 		}
+		if c.CheckDictionaryDuplicates {
+			newAttr := uniqAttr{
+				key:   kvu.KeyStrindex,
+				unit:  kvu.UnitStrindex,
+				value: kvu.Value.GetStringValue(),
+			}
+			if _, exists := uniqAttrs[newAttr]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate attribute at index %d: %v", pos, newAttr))
+				continue
+			}
+			uniqAttrs[newAttr] = struct{}{}
+		}
 	}
-	// TODO: Add optional uniqueness check.
 	return errs
 }
 
