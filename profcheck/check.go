@@ -237,7 +237,7 @@ func (c ConformanceChecker) checkMappingTable(mappingTable []*profiles.Mapping, 
 	}
 	uniqMappings := make(map[uniqMapping]struct{})
 
-	for idx, m := range mappingTable[1:] {
+	for idx, m := range mappingTable {
 		if err := c.checkIndex(len(dict.StringTable), m.FilenameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].filename_strindex", idx))
 		}
@@ -287,7 +287,7 @@ func (c ConformanceChecker) checkLocationTable(locTable []*profiles.Location, di
 	}
 	uniqLocations := make(map[uniqLocation]struct{})
 
-	for locIdx, loc := range locTable[1:] {
+	for locIdx, loc := range locTable {
 		if err := c.checkIndex(len(dict.MappingTable), loc.MappingIndex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].mapping_index", locIdx))
 		}
@@ -357,7 +357,7 @@ func (c ConformanceChecker) checkFunctionTable(funcTable []*profiles.Function, d
 	}
 	uniqFunctions := make(map[uniqFunction]struct{})
 
-	for idx, fnc := range funcTable[1:] {
+	for idx, fnc := range funcTable {
 		if err := c.checkIndex(len(dict.StringTable), fnc.NameStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].name_strindex", idx))
 		}
@@ -399,16 +399,18 @@ func (c ConformanceChecker) checkLinkTable(linkTable []*profiles.Link) error {
 	}
 	uniqLinks := make(map[uniqLink]struct{})
 
-	for idx, link := range linkTable[1:] {
-		validTraceID := len(link.TraceId) == 16
-		validSpanID := len(link.SpanId) == 8
-		if !validTraceID {
-			errs = errors.Join(errs, fmt.Errorf("len([%d].trace_id) == %d, want %d", idx, len(link.TraceId), 16))
+	for idx, link := range linkTable {
+		if idx != 0 {
+			validTraceID := len(link.TraceId) == 16
+			validSpanID := len(link.SpanId) == 8
+			if !validTraceID {
+				errs = errors.Join(errs, fmt.Errorf("len([%d].trace_id) == %d, want %d", idx, len(link.TraceId), 16))
+			}
+			if !validSpanID {
+				errs = errors.Join(errs, fmt.Errorf("len([%d].span_id) == %d, want %d", idx, len(link.SpanId), 8))
+			}
 		}
-		if !validSpanID {
-			errs = errors.Join(errs, fmt.Errorf("len([%d].span_id) == %d, want %d", idx, len(link.SpanId), 8))
-		}
-		if c.CheckDictionaryDuplicates && validTraceID && validSpanID {
+		if c.CheckDictionaryDuplicates {
 			var newLink uniqLink
 			copy(newLink.traceID[:], link.TraceId)
 			copy(newLink.spanID[:], link.SpanId)
@@ -484,14 +486,29 @@ func (c ConformanceChecker) checkStackTable(stackTable []*profiles.Stack, lenLoc
 	if err := checkZeroVal(stackTable); err != nil {
 		errs = errors.Join(errs, err)
 	}
+
+	type uniqStack struct {
+		locIdxs string
+	}
+	uniqStacks := make(map[uniqStack]struct{})
+
 	for i, stack := range stackTable {
 		for j, locIndex := range stack.LocationIndices {
 			if err := c.checkIndex(lenLocTable, locIndex); err != nil {
 				errs = errors.Join(errs, prefixErrorf(err, "[%d].location_indices[%d]", i, j))
 			}
 		}
+		if c.CheckDictionaryDuplicates {
+			newStack := uniqStack{
+				locIdxs: asSortedString(stack.LocationIndices),
+			}
+			if _, exists := uniqStacks[newStack]; exists {
+				errs = errors.Join(errs, fmt.Errorf("duplicate stack at index %d: %#v", i, newStack))
+				continue
+			}
+			uniqStacks[newStack] = struct{}{}
+		}
 	}
-	// TODO: Add optional uniqueness check.
 	return errs
 }
 
