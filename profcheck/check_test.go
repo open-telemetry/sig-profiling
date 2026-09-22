@@ -139,6 +139,34 @@ func TestCheckConformance(t *testing.T) {
 			wantErr: "duplicate stack",
 		},
 		{
+			desc: "duplicate attribute",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable:     []*profiles.Link{{}},
+					StringTable:   []string{"", "key1"},
+					AttributeTable: []*profiles.KeyValueAndUnit{
+						{},
+						{
+							KeyStrindex: 1, Value: makeAnyValue("v1"),
+						},
+						{
+							KeyStrindex: 1, Value: makeAnyValue("v1"),
+						},
+					},
+					StackTable: []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate attribute",
+		},
+		{
 			desc: "duplicate mapping",
 			data: &profiles.ProfilesData{
 				Dictionary: &profiles.ProfilesDictionary{
