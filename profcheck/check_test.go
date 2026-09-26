@@ -9,6 +9,7 @@ import (
 
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
+	resource "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
 func TestCheckConformance(t *testing.T) {
@@ -862,6 +863,222 @@ func TestCheckConformance(t *testing.T) {
 			},
 			checkReferences: true,
 			wantErr:         "",
+		},
+		{
+			desc: "references check: attribute value string_value_strindex",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					StringTable:    []string{"", "k1", "v1"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}, {KeyStrindex: 1, Value: &common.AnyValue{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 2}}}},
+					MappingTable:   []*profiles.Mapping{{}},
+					LocationTable:  []*profiles.Location{{}},
+					FunctionTable:  []*profiles.Function{{}},
+					LinkTable:      []*profiles.Link{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							AttributeIndices: []int32{1},
+						}},
+					}},
+				}},
+			},
+			checkReferences: true,
+			wantErr:         "",
+		},
+		{
+			desc: "references check: attribute value array string_value_strindex",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					StringTable: []string{"", "k1", "elem1", "elem2"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}, {
+						KeyStrindex: 1,
+						Value: &common.AnyValue{
+							Value: &common.AnyValue_ArrayValue{
+								ArrayValue: &common.ArrayValue{
+									Values: []*common.AnyValue{
+										{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 2}},
+										{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 3}},
+									},
+								},
+							},
+						},
+					}},
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable:     []*profiles.Link{{}},
+					StackTable:    []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							AttributeIndices: []int32{1},
+						}},
+					}},
+				}},
+			},
+			checkReferences: true,
+			wantErr:         "",
+		},
+		{
+			desc: "references check: attribute value kvlist key_strindex and string_value_strindex",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					StringTable: []string{"", "k1", "nested_k", "nested_v"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}, {
+						KeyStrindex: 1,
+						Value: &common.AnyValue{
+							Value: &common.AnyValue_KvlistValue{
+								KvlistValue: &common.KeyValueList{
+									Values: []*common.KeyValue{
+										{
+											KeyStrindex: 2,
+											Value:       &common.AnyValue{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 3}},
+										},
+									},
+								},
+							},
+						},
+					}},
+					MappingTable:  []*profiles.Mapping{{}},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable:     []*profiles.Link{{}},
+					StackTable:    []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							AttributeIndices: []int32{1},
+						}},
+					}},
+				}},
+			},
+			checkReferences: true,
+			wantErr:         "",
+		},
+		{
+			desc: "references check: resource and scope attributes key_strindex and string_value_strindex",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					StringTable:    []string{"", "res_k", "res_v", "scope_k", "scope_v"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}},
+					MappingTable:   []*profiles.Mapping{{}},
+					LocationTable:  []*profiles.Location{{}},
+					FunctionTable:  []*profiles.Function{{}},
+					LinkTable:      []*profiles.Link{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					Resource: &resource.Resource{
+						Attributes: []*common.KeyValue{
+							{KeyStrindex: 1, Value: &common.AnyValue{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 2}}},
+						},
+					},
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Scope: &common.InstrumentationScope{
+							Attributes: []*common.KeyValue{
+								{KeyStrindex: 3, Value: &common.AnyValue{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 4}}},
+							},
+						},
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			checkReferences: true,
+			wantErr:         "",
+		},
+		{
+			desc: "references check: unreferenced string with attribute string index present",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					StringTable:    []string{"", "k1", "v1", "orphan"},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}, {KeyStrindex: 1, Value: &common.AnyValue{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 2}}}},
+					MappingTable:   []*profiles.Mapping{{}},
+					LocationTable:  []*profiles.Location{{}},
+					FunctionTable:  []*profiles.Function{{}},
+					LinkTable:      []*profiles.Link{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{
+							AttributeIndices: []int32{1},
+						}},
+					}},
+				}},
+			},
+			checkReferences: true,
+			wantErr:         "string_table: unreferenced entry at index 3",
+		},
+		{
+			desc: "attribute value string_value_strindex out of range",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					StringTable:    []string{""},
+					AttributeTable: []*profiles.KeyValueAndUnit{{}, {KeyStrindex: 0, Value: &common.AnyValue{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 99}}}},
+					MappingTable:   []*profiles.Mapping{{}},
+					LocationTable:  []*profiles.Location{{}},
+					FunctionTable:  []*profiles.Function{{}},
+					LinkTable:      []*profiles.Link{{}},
+					StackTable:     []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "attribute_table: [1].value: string_value_strindex: index 99 is out of range",
+		},
+		{
+			desc: "resource attribute key_strindex out of range",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					Resource: &resource.Resource{
+						Attributes: []*common.KeyValue{{KeyStrindex: 99}},
+					},
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "resource.attributes[0]: key_strindex: index 99 is out of range",
+		},
+		{
+			desc: "scope attribute string_value_strindex out of range",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictionary,
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Scope: &common.InstrumentationScope{
+							Attributes: []*common.KeyValue{
+								{Value: &common.AnyValue{Value: &common.AnyValue_StringValueStrindex{StringValueStrindex: 99}}},
+							},
+						},
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "scope.attributes[0]: value: string_value_strindex: index 99 is out of range",
+		},
+		{
+			desc: "resource attribute key and key_strindex both set",
+			data: &profiles.ProfilesData{
+				Dictionary: zeroDictWithStringTable([]string{"", "k"}),
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					Resource: &resource.Resource{
+						Attributes: []*common.KeyValue{{Key: "k", KeyStrindex: 1}},
+					},
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "resource.attributes[0]: key and key_strindex cannot both be set",
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {

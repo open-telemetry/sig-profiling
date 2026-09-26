@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"slices"
 
+	common "go.opentelemetry.io/proto/otlp/common/v1"
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
 )
@@ -60,6 +61,11 @@ func (c ConformanceChecker) checkResourceProfiles(rp *profiles.ResourceProfiles,
 	if len(rp.ScopeProfiles) == 0 {
 		errs = errors.Join(errs, errors.New("resource profiles has no scope profiles"))
 	}
+	for j, kv := range rp.Resource.GetAttributes() {
+		if err := c.checkKeyValueStrindex(kv, len(dict.GetStringTable())); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "resource.attributes[%d]", j))
+		}
+	}
 	for i, sp := range rp.ScopeProfiles {
 		if err := c.checkScopeProfiles(sp, dict); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "scope_profiles[%d]", i))
@@ -72,6 +78,11 @@ func (c ConformanceChecker) checkScopeProfiles(sp *profiles.ScopeProfiles, dict 
 	var errs error
 	if len(sp.Profiles) == 0 {
 		errs = errors.Join(errs, errors.New("scope profiles has no profiles"))
+	}
+	for j, kv := range sp.Scope.GetAttributes() {
+		if err := c.checkKeyValueStrindex(kv, len(dict.GetStringTable())); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "scope.attributes[%d]", j))
+		}
 	}
 	for i, profile := range sp.Profiles {
 		if err := c.checkProfile(profile, dict); err != nil {
@@ -457,6 +468,9 @@ func (c ConformanceChecker) checkAttributeTable(attrTable []*profiles.KeyValueAn
 		if err := c.checkIndex(lenStrTable, kvu.UnitStrindex); err != nil {
 			errs = errors.Join(errs, prefixErrorf(err, "[%d].unit_strindex", pos))
 		}
+		if err := c.checkAnyValueStrindex(kvu.Value, lenStrTable); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "[%d].value", pos))
+		}
 	}
 	// TODO: Add optional uniqueness check.
 	return errs
@@ -553,7 +567,13 @@ func (c ConformanceChecker) checkDictionaryOrphans(data *profiles.ProfilesData) 
 
 	// Collect references from all profiles.
 	for _, rp := range data.ResourceProfiles {
+		for _, kv := range rp.Resource.GetAttributes() {
+			collectKeyValueStringRef(kv, strRefs)
+		}
 		for _, sp := range rp.ScopeProfiles {
+			for _, kv := range sp.Scope.GetAttributes() {
+				collectKeyValueStringRef(kv, strRefs)
+			}
 			for _, prof := range sp.Profiles {
 				strRefs[prof.GetSampleType().GetTypeStrindex()] = true
 				strRefs[prof.GetSampleType().GetUnitStrindex()] = true
@@ -610,6 +630,7 @@ func (c ConformanceChecker) checkDictionaryOrphans(data *profiles.ProfilesData) 
 	for _, kvu := range dict.AttributeTable {
 		strRefs[kvu.KeyStrindex] = true
 		strRefs[kvu.UnitStrindex] = true
+		collectAnyValueStringRef(kvu.Value, strRefs)
 	}
 
 	var errs error
@@ -714,4 +735,95 @@ func asLinesString(lines []*profiles.Line) string {
 		tuples[i] = [3]int64{int64(l.FunctionIndex), l.Line, l.Column}
 	}
 	return fmt.Sprint(tuples)
+}
+
+func (c ConformanceChecker) checkAnyValueStrindex(val *common.AnyValue, lenStrTable int) error {
+	if val == nil {
+		return nil
+	}
+	var errs error
+	switch v := val.Value.(type) {
+	case *common.AnyValue_StringValueStrindex:
+		if err := c.checkIndex(lenStrTable, v.StringValueStrindex); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "string_value_strindex"))
+		}
+	case *common.AnyValue_ArrayValue:
+		for i, elem := range v.ArrayValue.GetValues() {
+			if err := c.checkAnyValueStrindex(elem, lenStrTable); err != nil {
+				errs = errors.Join(errs, prefixErrorf(err, "array_value[%d]", i))
+			}
+		}
+	case *common.AnyValue_KvlistValue:
+		for i, kv := range v.KvlistValue.GetValues() {
+			if err := c.checkKeyValueStrindex(kv, lenStrTable); err != nil {
+				errs = errors.Join(errs, prefixErrorf(err, "kvlist_value[%d]", i))
+			}
+		}
+	case nil,
+		*common.AnyValue_StringValue,
+		*common.AnyValue_BoolValue,
+		*common.AnyValue_IntValue,
+		*common.AnyValue_DoubleValue,
+		*common.AnyValue_BytesValue:
+		// Do nothing.
+	default:
+		panic(fmt.Sprintf("unhandled AnyValue type %T", v))
+	}
+	return errs
+}
+
+func (c ConformanceChecker) checkKeyValueStrindex(kv *common.KeyValue, lenStrTable int) error {
+	if kv == nil {
+		return nil
+	}
+	var errs error
+	if kv.Key != "" && kv.KeyStrindex != 0 {
+		errs = errors.Join(errs, errors.New("key and key_strindex cannot both be set"))
+	}
+	if kv.KeyStrindex != 0 {
+		if err := c.checkIndex(lenStrTable, kv.KeyStrindex); err != nil {
+			errs = errors.Join(errs, prefixErrorf(err, "key_strindex"))
+		}
+	}
+	if err := c.checkAnyValueStrindex(kv.Value, lenStrTable); err != nil {
+		errs = errors.Join(errs, prefixErrorf(err, "value"))
+	}
+	return errs
+}
+
+func collectAnyValueStringRef(val *common.AnyValue, strRefs map[int32]bool) {
+	if val == nil {
+		return
+	}
+	switch v := val.Value.(type) {
+	case *common.AnyValue_StringValueStrindex:
+		strRefs[v.StringValueStrindex] = true
+	case *common.AnyValue_ArrayValue:
+		for _, elem := range v.ArrayValue.GetValues() {
+			collectAnyValueStringRef(elem, strRefs)
+		}
+	case *common.AnyValue_KvlistValue:
+		for _, kv := range v.KvlistValue.GetValues() {
+			collectKeyValueStringRef(kv, strRefs)
+		}
+	case nil,
+		*common.AnyValue_StringValue,
+		*common.AnyValue_BoolValue,
+		*common.AnyValue_IntValue,
+		*common.AnyValue_DoubleValue,
+		*common.AnyValue_BytesValue:
+		// Do nothing.
+	default:
+		panic(fmt.Sprintf("unhandled AnyValue type %T", v))
+	}
+}
+
+func collectKeyValueStringRef(kv *common.KeyValue, strRefs map[int32]bool) {
+	if kv == nil {
+		return
+	}
+	if kv.KeyStrindex != 0 {
+		strRefs[kv.KeyStrindex] = true
+	}
+	collectAnyValueStringRef(kv.Value, strRefs)
 }
