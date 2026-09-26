@@ -96,6 +96,50 @@ func TestCheckConformance(t *testing.T) {
 			wantErr: "duplicate string",
 		},
 		{
+			desc: "duplicate stack",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{
+						{},
+						{
+							FilenameStrindex: 1,
+							AttributeIndices: []int32{1, 2},
+							MemoryStart:      0x4000,
+							MemoryLimit:      0x4200,
+						},
+					},
+					LocationTable: []*profiles.Location{
+						{},
+						{Address: 0x123},
+						{Address: 0x456},
+					},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable:     []*profiles.Link{{}},
+					StringTable:   []string{"", "filename", "attr1", "attr2"},
+					AttributeTable: []*profiles.KeyValueAndUnit{
+						{},
+						{
+							KeyStrindex: 1, Value: makeAnyValue("v1"),
+						},
+						{
+							KeyStrindex: 2, Value: makeAnyValue("v2"),
+						},
+					},
+					StackTable: []*profiles.Stack{
+						{},
+						{LocationIndices: []int32{1, 2}},
+						{LocationIndices: []int32{1, 2}},
+					},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate stack",
+		},
+		{
 			desc: "duplicate mapping",
 			data: &profiles.ProfilesData{
 				Dictionary: &profiles.ProfilesDictionary{
@@ -136,6 +180,43 @@ func TestCheckConformance(t *testing.T) {
 				}},
 			},
 			wantErr: "duplicate mapping",
+		},
+		{
+			desc: "duplicate zero sentinel mapping",
+			data: &profiles.ProfilesData{
+				Dictionary: &profiles.ProfilesDictionary{
+					MappingTable: []*profiles.Mapping{
+						{},
+						{
+							FilenameStrindex: 1,
+							AttributeIndices: []int32{1, 2},
+							MemoryStart:      0x4000,
+							MemoryLimit:      0x4200,
+						},
+						{},
+					},
+					LocationTable: []*profiles.Location{{}},
+					FunctionTable: []*profiles.Function{{}},
+					LinkTable:     []*profiles.Link{{}},
+					StringTable:   []string{"", "filename", "attr1", "attr2"},
+					AttributeTable: []*profiles.KeyValueAndUnit{
+						{},
+						{
+							KeyStrindex: 1, Value: makeAnyValue("v1"),
+						},
+						{
+							KeyStrindex: 2, Value: makeAnyValue("v2"),
+						},
+					},
+					StackTable: []*profiles.Stack{{}},
+				},
+				ResourceProfiles: []*profiles.ResourceProfiles{{
+					ScopeProfiles: []*profiles.ScopeProfiles{{
+						Profiles: []*profiles.Profile{{}},
+					}},
+				}},
+			},
+			wantErr: "duplicate mapping at index 2",
 		},
 		{
 			desc: "duplicate function",
