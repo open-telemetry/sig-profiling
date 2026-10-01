@@ -469,7 +469,7 @@ func (c ConformanceChecker) checkAttributeTable(attrTable []*profiles.KeyValueAn
 			newAttr := uniqAttr{
 				key:   kvu.KeyStrindex,
 				unit:  kvu.UnitStrindex,
-				value: kvu.Value.GetStringValue(),
+				value: kvu.Value.String(),
 			}
 			if _, exists := uniqAttrs[newAttr]; exists {
 				errs = errors.Join(errs, fmt.Errorf("duplicate attribute at index %d: %v", pos, newAttr))
