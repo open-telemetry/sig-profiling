@@ -2,12 +2,6 @@
 
 This document preserves the context and tradeoffs behind the approved [OTLP Profiles versioning specification change](https://github.com/open-telemetry/opentelemetry-proto/blob/8c881680d50297009b1855f688dcfb17429d63b1/docs/specification.md#profiles-development-version).
 
-## Summary
-
-OTLP Profiles will continue to use `v1development` while incompatible Alpha and Beta changes are still allowed.
-
-The mechanism uses a temporary request metadata key, `otlp-profiles-development-version`, so servers can reject unsupported formats before decoding. Missing metadata means revision `1`. The key applies to OTLP/HTTP and OTLP/gRPC and is retired when Profiles move to `v1`.
-
 ## Motivation
 
 OTLP Profiles is currently Alpha and preparing for Beta. The [Beta roadmap](https://github.com/open-telemetry/sig-profiling/issues/117) includes at least one [incompatible data model change](https://github.com/open-telemetry/opentelemetry-proto/pull/786), and others may be needed before stability. This is allowed by the [OpenTelemetry maturity definitions](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/0232-maturity-of-otel.md).
