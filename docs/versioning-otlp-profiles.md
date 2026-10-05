@@ -1,9 +1,5 @@
 # Versioning OTLP Profiles
 
-Nayef Ghattas <nayef.ghattas@datadoghq.com> • July 2026 • Specification change approved in [opentelemetry-proto#857](https://github.com/open-telemetry/opentelemetry-proto/pull/857)
-
-*This document is shared publicly with the OpenTelemetry community.*
-
 This document preserves the context and tradeoffs behind the approved [OTLP Profiles versioning specification change](https://github.com/open-telemetry/opentelemetry-proto/blob/8c881680d50297009b1855f688dcfb17429d63b1/docs/specification.md#profiles-development-version).
 
 ## Summary
