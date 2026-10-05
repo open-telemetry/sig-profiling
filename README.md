@@ -1,5 +1,10 @@
 # OpenTelemetry Profiling SIG
 
+## Design Proposals
+
+- [Versioning OTLP Profiles](proposals/versioning-otlp-profiles.md) — Draft proposal
+  for identifying incompatible Profiles development formats before deserialization.
+
 ## Maintainers
 
 - [Felix Geisendörfer](https://github.com/felixge), Datadog
