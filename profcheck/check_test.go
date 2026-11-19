@@ -7,9 +7,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	common "go.opentelemetry.io/proto/otlp/common/v1"
-	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
-	resource "go.opentelemetry.io/proto/otlp/resource/v1"
+	common "go.opentelemetry.io/proto/slim/otlp/common/v1"
+	profiles "go.opentelemetry.io/proto/slim/otlp/profiles/v1development"
+	resource "go.opentelemetry.io/proto/slim/otlp/resource/v1"
 )
 
 func TestCheckConformance(t *testing.T) {
