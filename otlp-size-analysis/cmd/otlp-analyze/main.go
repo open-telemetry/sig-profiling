@@ -26,9 +26,9 @@ import (
 	"time"
 	"unicode"
 
-	profilespb "go.opentelemetry.io/proto/otlp/collector/profiles/v1development"
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
-	profilepb "go.opentelemetry.io/proto/otlp/profiles/v1development"
+	profilespb "go.opentelemetry.io/proto/slim/otlp/collector/profiles/v1development"
+	commonpb "go.opentelemetry.io/proto/slim/otlp/common/v1"
+	profilepb "go.opentelemetry.io/proto/slim/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
 )
 

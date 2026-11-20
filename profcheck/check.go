@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"slices"
 
-	common "go.opentelemetry.io/proto/otlp/common/v1"
-	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
+	common "go.opentelemetry.io/proto/slim/otlp/common/v1"
+	profiles "go.opentelemetry.io/proto/slim/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
 )
 

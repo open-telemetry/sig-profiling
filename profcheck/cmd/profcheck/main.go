@@ -23,7 +23,7 @@ import (
 
 	"github.com/open-telemetry/sig-profiling/profcheck"
 
-	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
+	profiles "go.opentelemetry.io/proto/slim/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
 )
 
